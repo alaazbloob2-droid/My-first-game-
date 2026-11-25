@@ -974,13 +974,20 @@ func _build_weapons(s: Ship) -> void:
 			m.dir = float(md["dir"])
 			m.arc = float(md["arc"])
 			# realistic arcs: turret mounts are trained by hull position, not 360 spinners.
-			# mounts sitting aft of the bridge sweep towards the stern, fore mounts towards the bow.
+			# mounts sitting aft of the bridge sweep towards the stern, fore mounts towards the
+			# bow, and the superstructure physically blocks about +/-65 degrees each side.
 			if w.kind == int(D.KIND["shell"]):
 				if m.x < L * -0.02:
 					m.dir = PI
-					m.arc = minf(m.arc, 2.45)
+					m.arc = minf(m.arc, 1.15)
 				elif m.x > L * 0.02:
-					m.arc = minf(m.arc, 2.45)
+					m.arc = minf(m.arc, 1.15)
+				elif absf(m.y) > W * 0.12 and m.arc >= 2.8:
+					# broadside secondary battery: trained outward on its own side
+					m.dir = PI * 0.5 if m.y > 0.0 else -PI * 0.5
+					m.arc = minf(m.arc, 1.15)
+				else:
+					m.arc = minf(m.arc, 1.15)
 			m.b = int(md["b"])
 			m.rot = m.dir
 			var dims := D.mount_dims(wd, m.b)

@@ -9,7 +9,7 @@ Open `project.godot` in Godot 4 and press F5.
 |---|---|
 | `data.gd` | **All content**: 10 tiers, 47 ships (carriers, 5 submarines, super-battleships), 20 weapons, aircraft, abilities, XP levels and competitive ranks. Add ships/weapons here. |
 | `main.gd` | World, warzone border, ramming, ship renderer, weapon mounts, squadrons, projectiles, fire/flood, detection, AI, effects |
-| `ui.gd` | Main menu with profile / ranked mode / tier picker, HUD, promotion / respawn pop-ups, settings window |
+| `ui.gd` | Full-screen main menu (profile card, ranked toggle, fleet browser, controls page), HUD, hit / low-health screen flashes, promotion / respawn pop-ups, settings window |
 | `audio.gd` | Procedural layered sound synthesis (no audio files needed) |
 | `settings.gd` | All options + key bindings + meta progression (XP / RP), saved to `user://naval_io_settings.cfg` |
 | `water.gdshader` | Ocean shader (3 quality levels) |
@@ -31,7 +31,7 @@ Open `project.godot` in Godot 4 and press F5.
 * **Progression**: account XP levels (1-30), competitive ranks (Rookie, Bronze, Silver, Gold, Platinum,
   Diamond, Master, Elite, Legend, PLUTONIUM), ranked mode toggle in the menu, and stronger ships
   locked behind account levels. Earn XP/RP by sinking ships.
-* **Main menu** with profile card (level, XP bar, rank), tier picker I-X, ranked toggle, settings.
+* **Full-screen main menu** with a profile card (nick, level, XP bar, rank), ranked toggle, FLEET browser page (all 47 ships across tiers I-X with level locks), CONTROLS page and settings; every battle starts at Tier I and you promote in-battle by earning score.
 * **More realistic sound**: guns and explosions are layered (crack + boom + rumble + echoes), sinking
   ships gurgle and groan.
 

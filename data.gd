@@ -90,10 +90,10 @@ const WEAPONS := {
 	"g460": {"n": "460mm Gun", "vis": "gun", "pk": "shell", "dmg": 340.0, "spd": 575.0, "rl": 6.2, "gap": 0.75, "spr": 0.022, "trav": 1.2, "bw": 3.2, "bl": 34.0, "spl": 58.0, "snd": "gun_xl", "ic": "shell_l", "rng": 1380.0},
 	"g510": {"n": "510mm Gun", "vis": "gun", "pk": "shell", "dmg": 500.0, "spd": 570.0, "rl": 7.0, "gap": 0.8, "spr": 0.02, "trav": 1.1, "bw": 3.4, "bl": 37.0, "spl": 64.0, "snd": "gun_xl", "ic": "shell_l", "rng": 1380.0},
 	"ciws": {"n": "CIWS Gatling", "vis": "ciws", "pk": "bullet", "dmg": 2.0, "spd": 800.0, "rl": 0.45, "gap": 0.03, "spr": 0.05, "trav": 9.0, "bw": 1.0, "bl": 6.0, "snd": "ciws", "aa": true, "pd": true, "ic": "bullet", "ar": 15.0, "rng": 400.0},
-	"torp": {"n": "533mm Torpedo", "vis": "tubes", "pk": "torp", "dmg": 130.0, "spd": 250.0, "rl": 9.0, "gap": 0.6, "spr": 0.02, "trav": 1.4, "mode": 0, "turn": 1.1, "spl": 26.0, "pick": true, "snd": "torp", "ic": "torp", "tl": 12.0, "rng": 900.0},
-	"torp_l": {"n": "Lightweight Homing Torpedo", "vis": "tubes", "pk": "torp", "dmg": 90.0, "spd": 290.0, "rl": 6.0, "gap": 0.5, "spr": 0.02, "trav": 1.6, "mode": 2, "turn": 2.2, "seek": 420.0, "spl": 20.0, "pick": true, "snd": "torp", "ic": "torp", "tl": 9.0, "rng": 650.0},
-	"torp_h": {"n": "Long Lance Torpedo", "vis": "tubes", "pk": "torp", "dmg": 360.0, "spd": 330.0, "rl": 14.0, "gap": 0.8, "spr": 0.015, "trav": 1.2, "mode": 0, "turn": 0.9, "spl": 38.0, "pick": true, "snd": "torp", "ic": "torp", "tl": 16.0, "seek": 0.0, "rng": 1400.0},
-	"torp_w": {"n": "Wire-Guided Torpedo", "vis": "tubes", "pk": "torp", "dmg": 230.0, "spd": 300.0, "rl": 11.0, "gap": 0.8, "spr": 0.015, "trav": 1.4, "mode": 2, "turn": 2.0, "spl": 32.0, "pick": true, "snd": "torp", "ic": "torp", "tl": 14.0, "seek": 520.0, "rng": 1200.0},
+	"torp": {"n": "533mm Torpedo", "vis": "tubes", "pk": "torp", "dmg": 130.0, "spd": 135.0, "rl": 9.0, "gap": 0.6, "spr": 0.02, "trav": 1.4, "mode": 0, "turn": 1.1, "spl": 26.0, "pick": true, "snd": "torp", "ic": "torp", "tl": 12.0, "rng": 900.0},
+	"torp_l": {"n": "Lightweight Homing Torpedo", "vis": "tubes", "pk": "torp", "dmg": 90.0, "spd": 150.0, "rl": 6.0, "gap": 0.5, "spr": 0.02, "trav": 1.6, "mode": 2, "turn": 2.2, "seek": 420.0, "spl": 20.0, "pick": true, "snd": "torp", "ic": "torp", "tl": 9.0, "rng": 650.0},
+	"torp_h": {"n": "Long Lance Torpedo", "vis": "tubes", "pk": "torp", "dmg": 360.0, "spd": 185.0, "rl": 14.0, "gap": 0.8, "spr": 0.015, "trav": 1.2, "mode": 0, "turn": 0.9, "spl": 38.0, "pick": true, "snd": "torp", "ic": "torp", "tl": 16.0, "seek": 0.0, "rng": 1400.0},
+	"torp_w": {"n": "Wire-Guided Torpedo", "vis": "tubes", "pk": "torp", "dmg": 230.0, "spd": 170.0, "rl": 11.0, "gap": 0.8, "spr": 0.015, "trav": 1.4, "mode": 2, "turn": 2.0, "spl": 32.0, "pick": true, "snd": "torp", "ic": "torp", "tl": 14.0, "seek": 520.0, "rng": 1200.0},
 	"mine": {"n": "Mine / Depth Charge Rack", "vis": "mine", "pk": "mine", "dmg": 220.0, "spd": 40.0, "rng": 60.0, "rl": 8.0, "gap": 1.2, "spr": 0.3, "trav": 1.0, "spl": 58.0, "snd": "mine", "ic": "mine"},
 	"rocket": {"n": "Rocket Barrage", "vis": "rack", "pk": "rocket", "dmg": 16.0, "sal": 8, "spd": 460.0, "rl": 7.0, "gap": 0.8, "spr": 0.16, "trav": 2.0, "mode": 0, "turn": 0.6, "spl": 17.0, "snd": "rocket", "ic": "rocket", "mt": 5, "rng": 720.0},
 	"rocket_h": {"n": "Unguided Missile Salvo", "vis": "rack", "pk": "rocket", "dmg": 55.0, "sal": 2, "spd": 540.0, "rl": 11.0, "gap": 1.0, "spr": 0.05, "trav": 1.6, "mode": 0, "turn": 0.0, "spl": 24.0, "snd": "rocket", "ic": "rocket_h", "mt": 6, "rng": 1100.0},
@@ -103,7 +103,7 @@ const WEAPONS := {
 	"cruise": {"n": "Long-Range Cruise Missile", "vis": "vls", "pk": "missile", "dmg": 230.0, "spd": 430.0, "rl": 20.0, "gap": 1.5, "spr": 0.0, "trav": 1.0, "mode": 2, "turn": 3.0, "spl": 34.0, "snd": "missile", "ic": "cruise", "seek": 1500.0, "mt": 4, "rng": 4200.0},
 	"a_mg": {"n": "Door / Chain Gun", "vis": "gun", "pk": "bullet", "dmg": 6.0, "spd": 700.0, "rl": 0.16, "gap": 0.06, "spr": 0.06, "trav": 9.0, "bw": 0.8, "bl": 5.0, "snd": "mg", "ic": "bullet", "rng": 480.0},
 	"a_rocket": {"n": "Rocket Pod", "vis": "rack", "pk": "rocket", "dmg": 17.0, "sal": 6, "spd": 520.0, "rl": 8.0, "gap": 0.9, "spr": 0.1, "trav": 1.0, "mode": 0, "turn": 0.0, "spl": 16.0, "snd": "rocket", "ic": "rocket", "mt": 5, "rng": 700.0},
-	"a_torp": {"n": "Air-Dropped Torpedo", "vis": "tubes", "pk": "torp", "dmg": 170.0, "spd": 260.0, "rl": 14.0, "gap": 1.0, "spr": 0.0, "trav": 1.0, "mode": 2, "turn": 1.5, "seek": 260.0, "spl": 28.0, "snd": "torp", "ic": "torp", "tl": 9.0, "rng": 800.0},
+	"a_torp": {"n": "Air-Dropped Torpedo", "vis": "tubes", "pk": "torp", "dmg": 170.0, "spd": 145.0, "rl": 14.0, "gap": 1.0, "spr": 0.0, "trav": 1.0, "mode": 2, "turn": 1.5, "seek": 260.0, "spl": 28.0, "snd": "torp", "ic": "torp", "tl": 9.0, "rng": 800.0},
 	"bomb_s": {"n": "Light Bombs", "vis": "rack", "pk": "bomb", "dmg": 70.0, "spd": 0.0, "rng": 0.0, "rl": 7.0, "gap": 0.5, "spr": 0.0, "trav": 1.0, "spl": 36.0, "snd": "bomb", "ic": "bomb"},
 	"bomb_l": {"n": "Heavy Bombs", "vis": "rack", "pk": "bomb", "dmg": 280.0, "spd": 0.0, "rng": 0.0, "rl": 12.0, "gap": 1.0, "spr": 0.0, "trav": 1.0, "spl": 54.0, "snd": "bomb", "ic": "bomb"},
 	"mark": {"n": "Target Designator", "vis": "rack", "pk": "bullet", "dmg": 0.0, "spd": 0.0, "rng": 700.0, "rl": 6.0, "gap": 0.2, "spr": 0.0, "trav": 1.0, "special": "mark", "snd": "ping", "ic": "mark"},
@@ -137,7 +137,7 @@ const ABILITIES := {
 	"barrage": {"n": "Barrage", "dur": 6.0, "cd": 38.0, "desc": "Weapons reload twice as fast"},
 	"chaff": {"n": "Countermeasures", "dur": 0.5, "cd": 24.0, "desc": "Nearby missiles and torpedoes lose lock"},
 	"mine_l": {"n": "Rapid Laying", "dur": 5.0, "cd": 30.0, "desc": "Mine reloads four times faster"},
-	"dive": {"n": "Emergency Dive", "dur": 8.0, "cd": 30.0, "desc": "Submerge: much harder to spot, missiles lose lock"},
+	"dive": {"n": "Emergency Dive", "dur": 12.0, "cd": 60.0, "desc": "Submerge for 12s: guns cannot touch you, only torpedoes. Long recharge while surfaced."},
 }
 
 const PAL := {
@@ -220,11 +220,13 @@ static func g(w: String, pts: Array, b: int = 1, dir: float = 0.0, arc: float = 
 	return d
 
 static func _s(id: String, nm: String, tier: int, cls: String, style: String, L: float, W: float, hp: float, spd: float, turn: float, det: float, rlm: float, abil: Array, air: String, weapons: Array, ex: Dictionary = {}) -> Dictionary:
+	spd *= 0.80
+	turn *= 0.92
 	var d := {"id": id, "name": nm, "tier": tier, "cls": cls, "style": style, "len": L, "wid": W, "hp": hp, "spd": spd, "turn": turn, "det": det, "rlm": rlm, "abil": abil, "air": air, "weapons": weapons, "cam": float(TIER_ZOOM[tier - 1]), "pal": "", "desc": "", "stealth": clampf(0.5 + L / 500.0, 0.6, 1.0)}
 	for k in ex.keys():
 		d[k] = ex[k]
 	# reload speed depends on tier (bigger ships are slower) and era (modern autoloaders are faster)
-	var r := rlm * (0.8 + 0.03 * float(tier)) * 0.9
+	var r := rlm * (0.8 + 0.03 * float(tier)) * 1.05
 	if str(d["style"]) in ["mods", "modm", "modl", "modxl", "rum", "rul", "ars", "cv", "sub"]:
 		r *= 0.94
 	d["rlm"] = r
@@ -402,18 +404,20 @@ static func dps(def: Dictionary) -> float:
 		tot += minf(by_reload, by_gap)
 	return tot
 
+const MSCALE := 0.6
+
 static func mount_dims(wd: Dictionary, b: int) -> Vector2:
 	# returns Vector2(muzzle forward offset, barrel spacing)
 	match str(wd["vis"]):
 		"gun":
-			var bw := float(wd["bw"])
-			var bl := float(wd["bl"])
-			var tl := bl * 0.6 + 4.0
+			var bw := float(wd["bw"]) * MSCALE
+			var bl := float(wd["bl"]) * MSCALE
+			var tl := bl * 0.6 + 2.5
 			return Vector2(tl * 0.3 + bl, bw * 1.4)
 		"ciws":
 			return Vector2(6.0, 1.0)
 		"tubes":
-			return Vector2(float(wd.get("tl", 10.0)) * 0.5 + 2.0, 2.6)
+			return Vector2(float(wd.get("tl", 10.0)) * 0.5 * 0.75 + 2.0, 2.6)
 		"can":
 			return Vector2(7.0, 3.2)
 		"vls":

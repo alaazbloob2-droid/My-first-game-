@@ -1444,7 +1444,7 @@ func _draw_parked(c: Node2D, aid: String, L: float, W: float) -> void:
 	var ad: Dictionary = D.AIR[aid]
 	var col: Color = ad["col"]
 	if str(ad["kind"]) == "heli":
-		c.draw_set_transform(Vector2(-L * 0.30, 0.0), 0.0, Vector2.ONE * float(ad["size"]) * 0.4)
+		c.draw_set_transform(Vector2(-L * 0.30, 0.0), 0.0, Vector2.ONE * float(ad["size"]) * 0.34)
 		c.draw_colored_polygon(_shift_pts(_ellipse_pts(7.0, 3.0, 10), Vector2(1.5, 2.0)), Color(0, 0, 0, 0.28))
 		c.draw_line(Vector2(-4.0, 0.0), Vector2(-17.0, 0.0), col.darkened(0.4), 1.6)
 		c.draw_colored_polygon(_ellipse_pts(6.5, 2.8, 10), col)
@@ -1456,7 +1456,7 @@ func _draw_parked(c: Node2D, aid: String, L: float, W: float) -> void:
 		var at := Vector2(-L * 0.20, 0.0)
 		if str(ad["n"]).begins_with("Recon"):
 			at = Vector2(-L * 0.38, 0.0)
-		_draw_small_plane(c, at, 0.0, 0.42 * float(ad["size"]), col)
+		_draw_small_plane(c, at, 0.0, 0.36 * float(ad["size"]), col)
 
 func _ellipse_pts(rx: float, ry: float, n: int) -> PackedVector2Array:
 	return _scale_pts(_circle_pts(1.0, n), rx, ry)
@@ -1554,7 +1554,7 @@ func _draw_mount_base(c: Node2D, wd: Dictionary, m: MountRT) -> void:
 			c.draw_circle(Vector2(-0.8, -0.8), 1.2, Color(1, 1, 1, 0.7))
 			c.draw_arc(Vector2(-1.6, 0.0), 1.8, -1.3, 1.3, 8, Color(0.2, 0.2, 0.22), 0.9)
 		"tubes":
-			var tl2 := float(wd.get("tl", 10.0)) * 0.75
+			var tl2 := float(wd.get("tl", 10.0)) * 0.65
 			var hh := float(m.b) * m.bsp + 1.0
 			c.draw_circle(Vector2.ZERO, tl2 * 0.5, Color(0, 0, 0, 0.25))
 			c.draw_circle(Vector2.ZERO, tl2 * 0.42, Color(0.20, 0.22, 0.25))
@@ -1566,35 +1566,35 @@ func _draw_mount_base(c: Node2D, wd: Dictionary, m: MountRT) -> void:
 				c.draw_rect(Rect2(Vector2(tl2 * 0.5, y2 - 1.0), Vector2(1.0, 2.0)), dark)
 			c.draw_rect(Rect2(Vector2(-tl2 * 0.5 - 1.0, -hh * 0.5 - 0.5), Vector2(1.2, hh + 1.0)), Color(0.5, 0.2, 0.15))
 		"can":
-			var hh2 := float(m.b) * m.bsp + 1.0
-			c.draw_rect(Rect2(Vector2(-4.2, -hh2 * 0.5 + 1.0), Vector2(10.0, hh2)), Color(0, 0, 0, 0.28))
-			c.draw_rect(Rect2(Vector2(-5.0, -hh2 * 0.5), Vector2(10.0, hh2)), Color(0.30, 0.34, 0.30))
-			c.draw_line(Vector2(-5.0, -hh2 * 0.5 + 0.6), Vector2(5.0, -hh2 * 0.5 + 0.6), Color(0.5, 0.55, 0.5), 0.6)
+			var hh2 := float(m.b) * m.bsp + 0.8
+			c.draw_rect(Rect2(Vector2(-3.4, -hh2 * 0.5 + 1.0), Vector2(8.0, hh2)), Color(0, 0, 0, 0.28))
+			c.draw_rect(Rect2(Vector2(-4.0, -hh2 * 0.5), Vector2(8.0, hh2)), Color(0.30, 0.34, 0.30))
+			c.draw_line(Vector2(-4.0, -hh2 * 0.5 + 0.6), Vector2(4.0, -hh2 * 0.5 + 0.6), Color(0.5, 0.55, 0.5), 0.6)
 			for k in m.b:
 				var y3 := (float(k) - float(m.b - 1) * 0.5) * m.bsp
-				c.draw_rect(Rect2(Vector2(3.6, y3 - 1.2), Vector2(1.4, 2.4)), Color(0.74, 0.22, 0.15))
-				c.draw_line(Vector2(-5.0, y3 + m.bsp * 0.5), Vector2(3.6, y3 + m.bsp * 0.5), Color(0.1, 0.12, 0.1, 0.8), 0.5)
+				c.draw_rect(Rect2(Vector2(2.8, y3 - 1.0), Vector2(1.2, 2.0)), Color(0.74, 0.22, 0.15))
+				c.draw_line(Vector2(-4.0, y3 + m.bsp * 0.5), Vector2(2.8, y3 + m.bsp * 0.5), Color(0.1, 0.12, 0.1, 0.8), 0.5)
 		"vls":
 			var cols := mini(m.b, 4)
 			var rows := ceili(float(m.b) / float(cols))
-			var gw := float(cols) * 3.0 + 1.8
-			var gh := float(rows) * 3.0 + 1.8
+			var gw := float(cols) * 2.4 + 1.6
+			var gh := float(rows) * 2.4 + 1.6
 			c.draw_rect(Rect2(Vector2(-gw * 0.5 + 1.0, -gh * 0.5 + 1.2), Vector2(gw, gh)), Color(0, 0, 0, 0.3))
 			c.draw_rect(Rect2(Vector2(-gw * 0.5, -gh * 0.5), Vector2(gw, gh)), dark)
 			for k in m.b:
-				var cx := float(k % cols) * 3.0 - float(cols) * 1.5
-				var cy := float(floori(float(k) / float(cols))) * 3.0 - float(rows) * 1.5
-				c.draw_rect(Rect2(Vector2(cx + 0.3, cy + 0.3), Vector2(2.4, 2.4)), Color(0.32, 0.35, 0.38))
-				c.draw_line(Vector2(cx + 0.5, cy + 0.5), Vector2(cx + 2.5, cy + 2.5), Color(0.18, 0.2, 0.22), 0.5)
+				var cx := float(k % cols) * 2.4 - float(cols) * 1.2
+				var cy := float(floori(float(k) / float(cols))) * 2.4 - float(rows) * 1.2
+				c.draw_rect(Rect2(Vector2(cx + 0.25, cy + 0.25), Vector2(1.9, 1.9)), Color(0.32, 0.35, 0.38))
+				c.draw_line(Vector2(cx + 0.45, cy + 0.45), Vector2(cx + 2.0, cy + 2.0), Color(0.18, 0.2, 0.22), 0.4)
 		"rack":
-			c.draw_rect(Rect2(Vector2(-4.8, -2.5), Vector2(12.0, 7.0)), Color(0, 0, 0, 0.25))
-			c.draw_rect(Rect2(Vector2(-6.0, -3.5), Vector2(12.0, 7.0)), Color(0.24, 0.27, 0.22))
-			c.draw_rect(Rect2(Vector2(-6.0, -3.5), Vector2(12.0, 1.0)), Color(0.38, 0.42, 0.34))
+			c.draw_rect(Rect2(Vector2(-4.0, -2.1), Vector2(9.6, 5.6)), Color(0, 0, 0, 0.25))
+			c.draw_rect(Rect2(Vector2(-5.0, -3.0), Vector2(9.8, 5.6)), Color(0.24, 0.27, 0.22))
+			c.draw_rect(Rect2(Vector2(-5.0, -3.0), Vector2(9.8, 0.9)), Color(0.38, 0.42, 0.34))
 			for k in 3:
 				for j in 2:
-					var p := Vector2(float(k) * 3.4 - 3.4, float(j) * 3.6 - 1.8)
-					c.draw_circle(p, 1.3, Color(0.08, 0.09, 0.08))
-					c.draw_circle(p, 0.8, Color(0.66, 0.54, 0.30))
+					var p := Vector2(float(k) * 2.9 - 2.9, float(j) * 2.9 - 1.45)
+					c.draw_circle(p, 1.1, Color(0.08, 0.09, 0.08))
+					c.draw_circle(p, 0.7, Color(0.66, 0.54, 0.30))
 		"mine":
 			c.draw_rect(Rect2(Vector2(-6.0, -3.5), Vector2(12.0, 0.8)), Color(0.25, 0.26, 0.28))
 			c.draw_rect(Rect2(Vector2(-6.0, 2.7), Vector2(12.0, 0.8)), Color(0.25, 0.26, 0.28))
@@ -1683,9 +1683,9 @@ func _ac(shadow: bool, c: Color) -> Color:
 	return Color(0, 0, 0, 0.25) if shadow else c
 
 func _air_shapes(parent: Node2D, a: Air, shadow: bool) -> void:
-	# aircraft are drawn at 0.6 scale: a scout plane should be a speck against a carrier,
+	# aircraft are drawn small: a scout plane should be a speck against a carrier,
 	# not a second ship parked on its deck
-	var k := float(a.d["size"]) * 0.6
+	var k := float(a.d["size"]) * 0.5
 	var col: Color = a.d["col"]
 	var dk := col.darkened(0.4)
 	if str(a.d["kind"]) == "heli":
@@ -2027,6 +2027,9 @@ func _update_mounts(s: Ship, dt: float) -> void:
 		if only >= 0 and wi != only and not w.sec:
 			continue
 		var trav := float(w.d["trav"]) * dt
+		if w.kind == K_SHELL:
+			# heavy turrets are hydraulically slow: a 460mm mount swings nothing like an AA gun
+			trav *= 0.9 / (0.5 + float(w.d.get("bw", 1.0)))
 		for m in w.mounts:
 			if m.arc <= 0.001:
 				continue
@@ -2873,25 +2876,9 @@ func _step_air_unit(s: Ship, a: Air, dt: float, ai_only: bool) -> void:
 			a.warn = true
 			a.angle += clampf(angle_difference(a.angle, to_ship.angle()), -1.0, 1.0) * turn * dt * 1.6
 		a.vel = Vector2.from_angle(a.angle) * a.spd
-	elif ai_only or not s.is_player:
-		_air_ai(s, a, dt)
-	elif heli:
-		var tp := s.pos + Vector2.from_angle(s.angle + 2.3) * (s.hl + 45.0)
-		var dv := tp - a.pos
-		var dl := dv.length()
-		var want := clampf(dl * 1.6, 0.0, spd)
-		var face := s.angle
-		if dl > 25.0:
-			face = dv.angle()
-		a.angle += clampf(angle_difference(a.angle, face), -1.0, 1.0) * turn * dt * 1.5
-		a.spd = move_toward(a.spd, want, spd * dt * 1.5)
-		a.vel = dv / maxf(dl, 0.001) * a.spd
 	else:
-		var around := (a.pos - s.pos).angle()
-		var tp2 := s.pos + Vector2.from_angle(around + 0.55) * 170.0
-		a.angle += clampf(angle_difference(a.angle, (tp2 - a.pos).angle()), -1.0, 1.0) * turn * dt * 1.4
-		a.spd = move_toward(a.spd, spd * 0.8, spd * dt)
-		a.vel = Vector2.from_angle(a.angle) * a.spd
+		# uncontrolled aircraft keep station near the ship but hunt on their own
+		_air_ai(s, a, dt)
 	a.pos += a.vel * dt
 	a.pos = _zone_clamp(a.pos, -140.0)
 	var show := s.is_player or s.seen or not S.b("fog")
@@ -2995,6 +2982,39 @@ func _auto_air_fire(s: Ship, a: Air, dt: float) -> void:
 		elif dist < rng_w * 0.9:
 			_air_fire(s, a, wi)
 
+# uncontrolled aircraft pick their own mark: nearest enemy the PILOT can see, inside the leash
+func _air_pick_target(s: Ship, a: Air, leash: float) -> Ship:
+	var vis := float(a.d["vis"])
+	var best: Ship = null
+	var bd := leash * leash
+	for o in ships:
+		if not o.alive or o == s or o.invuln > 0.0 or o.dive_t > 0.0:
+			continue
+		var d2 := a.pos.distance_squared_to(o.pos)
+		if d2 >= bd:
+			continue
+		var f := o.stealth
+		if o.mark_t > 0.0 or s.radar_t > 0.0 or o.reveal_t > 0.0:
+			f = 1.0
+		elif o.smoke_t > 0.0:
+			f *= 0.3
+		var r := vis * f
+		if not s.is_player:
+			r *= bot_det
+		if d2 < r * r:
+			bd = d2
+			best = o
+	return best
+
+func _air_has_shot(a: Air) -> bool:
+	for w in a.weapons:
+		if w.d.has("special"):
+			continue
+		for k in w.total:
+			if w.cd[k] <= 0.0:
+				return true
+	return false
+
 # enemy aircraft: scouts mark targets, helicopters hover and shoot, bombers make attack runs
 func _air_ai(s: Ship, a: Air, dt: float) -> void:
 	var d := a.d
@@ -3004,8 +3024,16 @@ func _air_ai(s: Ship, a: Air, dt: float) -> void:
 	var role := a.id
 	var leash := float(d["leash"])
 	var tgt: Ship = null
-	if s.target != null and s.target.alive and s.target.pos.distance_squared_to(s.pos) < leash * leash * 0.5:
+	if s.target != null and s.target.alive and s.target.pos.distance_squared_to(s.pos) < leash * leash:
 		tgt = s.target
+	if tgt == null:
+		# autonomous hunting: remember our own mark and pick the nearest one the crew can spot
+		if a.target != null and (not a.target.alive or a.target.dive_t > 0.0 or a.target.pos.distance_squared_to(s.pos) > leash * leash):
+			a.target = null
+		if a.target == null:
+			a.target = _air_pick_target(s, a, leash)
+		if a.target != null and a.target.alive:
+			tgt = a.target
 	var attacker := role in ["dive_bomber", "torp_bomber", "patrol_seaplane", "jet_strike", "jet_bomber", "heli_attack", "heli_asw", "heli_heavy", "floatplane"]
 	var scout := role in ["uav", "heli_scout", "heli_l", "floatplane", "patrol_seaplane"]
 	var vis := float(d["vis"])
@@ -3045,7 +3073,7 @@ func _air_ai(s: Ship, a: Air, dt: float) -> void:
 		desired = (tp2 - a.pos).angle()
 		if back:
 			desired = to_ship.angle()
-		if attacker and tgt != null and not back and a.mode_t <= 0.0 and _air_ready(a, K_BOMB):
+		if attacker and tgt != null and not back and a.mode_t <= 0.0 and _air_has_shot(a):
 			a.mode = 1
 	elif a.mode == 1:
 		if tgt == null or back:
@@ -3068,6 +3096,10 @@ func _air_ai(s: Ship, a: Air, dt: float) -> void:
 					elif w2.kind == K_TORP and dl2 < 340.0:
 						_air_fire(s, a, wi2)
 					elif w2.kind == K_BOMB and dl2 < 150.0:
+						_air_fire(s, a, wi2)
+					elif w2.kind == K_MISSILE and dl2 < float(w2.d["rng"]) * 0.8:
+						_air_fire(s, a, wi2)
+					elif w2.kind == K_ROCKET and dl2 < 480.0:
 						_air_fire(s, a, wi2)
 			if dl2 < 60.0:
 				a.mode = 2
@@ -4175,6 +4207,12 @@ func _draw_missile(L: CanvasItem, sh: Shot) -> void:
 		6:
 			tc = Color(0.76, 0.70, 0.60)
 			tw = 2.0
+		7:
+			tc = Color(0.78, 0.80, 0.84)
+			tw = 1.8
+		8:
+			tc = Color(0.88, 0.90, 0.94)
+			tw = 2.8
 	if sh.trail.size() >= 2 and quality >= 1:
 		var pts := PackedVector2Array(sh.trail)
 		pts.append(sh.pos)
@@ -4190,6 +4228,7 @@ func _draw_missile(L: CanvasItem, sh: Shot) -> void:
 			L.draw_colored_polygon(PackedVector2Array([Vector2(-4.5, -1.1), Vector2(-2.8, -1.1), Vector2(-4.5, -2.9)]), Color(0.6, 0.63, 0.68))
 			L.draw_colored_polygon(PackedVector2Array([Vector2(-4.5, 1.1), Vector2(-2.8, 1.1), Vector2(-4.5, 2.9)]), Color(0.6, 0.63, 0.68))
 			L.draw_rect(Rect2(Vector2(-4.5, -1.1), Vector2(8.0, 2.2)), Color(0.92, 0.93, 0.95))
+			L.draw_rect(Rect2(Vector2(0.6, -2.6), Vector2(1.0, 5.2)), Color(0.62, 0.65, 0.70))
 			L.draw_colored_polygon(PackedVector2Array([Vector2(3.5, -1.1), Vector2(6.0, 0.0), Vector2(3.5, 1.1)]), Color(0.85, 0.20, 0.18))
 		2:
 			L.draw_line(Vector2(-5.5, 0.0), Vector2(-5.5 - fl, 0.0), Color(1.0, 0.75, 0.3, 0.9), 2.2)
@@ -4197,6 +4236,7 @@ func _draw_missile(L: CanvasItem, sh: Shot) -> void:
 			L.draw_colored_polygon(PackedVector2Array([Vector2(-5.5, -1.3), Vector2(-3.8, -1.3), Vector2(-5.5, -2.8)]), Color(0.35, 0.37, 0.42))
 			L.draw_colored_polygon(PackedVector2Array([Vector2(-5.5, 1.3), Vector2(-3.8, 1.3), Vector2(-5.5, 2.8)]), Color(0.35, 0.37, 0.42))
 			L.draw_rect(Rect2(Vector2(-5.5, -1.3), Vector2(10.0, 2.6)), Color(0.88, 0.90, 0.92))
+			L.draw_rect(Rect2(Vector2(1.4, -3.0), Vector2(1.1, 6.0)), Color(0.32, 0.34, 0.38))
 			L.draw_rect(Rect2(Vector2(-1.0, -1.3), Vector2(1.6, 2.6)), Color(0.20, 0.40, 0.80))
 			L.draw_colored_polygon(PackedVector2Array([Vector2(4.5, -1.3), Vector2(7.5, 0.0), Vector2(4.5, 1.3)]), Color(0.95, 0.60, 0.15))
 		3:
@@ -4205,6 +4245,9 @@ func _draw_missile(L: CanvasItem, sh: Shot) -> void:
 			L.draw_colored_polygon(PackedVector2Array([Vector2(-1.0, -1.8), Vector2(-6.0, -1.8), Vector2(-6.0, -5.5)]), Color(0.28, 0.31, 0.36))
 			L.draw_colored_polygon(PackedVector2Array([Vector2(-1.0, 1.8), Vector2(-6.0, 1.8), Vector2(-6.0, 5.5)]), Color(0.28, 0.31, 0.36))
 			L.draw_rect(Rect2(Vector2(-7.0, -1.8), Vector2(14.0, 3.6)), Color(0.38, 0.42, 0.48))
+			L.draw_colored_polygon(PackedVector2Array([Vector2(5.0, -1.8), Vector2(3.6, -3.4), Vector2(2.8, -1.8)]), Color(0.28, 0.31, 0.36))
+			L.draw_colored_polygon(PackedVector2Array([Vector2(5.0, 1.8), Vector2(3.6, 3.4), Vector2(2.8, 1.8)]), Color(0.28, 0.31, 0.36))
+			L.draw_circle(Vector2(-4.4, 0.0), 1.0, Color(0.16, 0.18, 0.20))
 			L.draw_colored_polygon(PackedVector2Array([Vector2(7.0, -1.8), Vector2(10.5, 0.0), Vector2(7.0, 1.8)]), Color(0.85, 0.86, 0.88))
 		4:
 			L.draw_line(Vector2(-6.0, 0.0), Vector2(-6.0 - fl * 0.7, 0.0), Color(1.0, 0.8, 0.5, 0.9), 1.4)
@@ -4223,6 +4266,28 @@ func _draw_missile(L: CanvasItem, sh: Shot) -> void:
 			L.draw_rect(Rect2(Vector2(-4.5, -1.0), Vector2(8.0, 2.0)), Color(0.50, 0.45, 0.28))
 			L.draw_rect(Rect2(Vector2(-1.0, -1.0), Vector2(1.2, 2.0)), Color(0.95, 0.80, 0.20))
 			L.draw_colored_polygon(PackedVector2Array([Vector2(3.5, -1.0), Vector2(5.5, 0.0), Vector2(3.5, 1.0)]), Color(0.80, 0.20, 0.18))
+		7:
+			# light air-launched missile: slim body, small cruciform fins
+			L.draw_line(Vector2(-3.8, 0.0), Vector2(-3.8 - fl * 0.7, 0.0), Color(1.0, 0.7, 0.25, 0.9), 1.4)
+			L.draw_colored_polygon(PackedVector2Array([Vector2(-3.8, -0.8), Vector2(-2.6, -0.8), Vector2(-3.8, -2.2)]), Color(0.5, 0.53, 0.58))
+			L.draw_colored_polygon(PackedVector2Array([Vector2(-3.8, 0.8), Vector2(-2.6, 0.8), Vector2(-3.8, 2.2)]), Color(0.5, 0.53, 0.58))
+			L.draw_rect(Rect2(Vector2(-3.8, -0.9), Vector2(7.0, 1.8)), Color(0.90, 0.91, 0.94))
+			L.draw_rect(Rect2(Vector2(-0.4, -2.3), Vector2(0.9, 4.6)), Color(0.55, 0.58, 0.62))
+			L.draw_rect(Rect2(Vector2(1.2, -0.9), Vector2(1.0, 1.8)), Color(0.2, 0.3, 0.45))
+			L.draw_colored_polygon(PackedVector2Array([Vector2(3.2, -0.9), Vector2(5.0, 0.0), Vector2(3.2, 0.9)]), Color(0.82, 0.24, 0.18))
+		8:
+			# heavy supersonic air-launched missile: long nose, swept wings, twin boosters
+			L.draw_line(Vector2(-6.5, 0.5), Vector2(-6.5 - fl * 1.4, 0.5), Color(0.75, 0.85, 1.0, 0.95), 2.4)
+			L.draw_line(Vector2(-6.5, -0.5), Vector2(-6.5 - fl * 1.4, -0.5), Color(1.0, 0.65, 0.25, 0.9), 1.6)
+			L.draw_colored_polygon(PackedVector2Array([Vector2(0.5, -1.9), Vector2(-2.5, -5.2), Vector2(-4.2, -5.2), Vector2(-1.5, -1.9)]), Color(0.30, 0.33, 0.40))
+			L.draw_colored_polygon(PackedVector2Array([Vector2(0.5, 1.9), Vector2(-2.5, 5.2), Vector2(-4.2, 5.2), Vector2(-1.5, 1.9)]), Color(0.30, 0.33, 0.40))
+			L.draw_circle(Vector2(-5.8, -1.1), 1.1, Color(0.25, 0.27, 0.30))
+			L.draw_circle(Vector2(-5.8, 1.1), 1.1, Color(0.25, 0.27, 0.30))
+			L.draw_rect(Rect2(Vector2(-6.5, -1.9), Vector2(13.5, 3.8)), Color(0.94, 0.95, 0.97))
+			L.draw_rect(Rect2(Vector2(-6.5, -1.9), Vector2(2.0, 3.8)), Color(0.32, 0.35, 0.40))
+			L.draw_colored_polygon(PackedVector2Array([Vector2(3.0, -1.9), Vector2(4.6, -4.0), Vector2(5.4, -1.9)]), Color(0.30, 0.33, 0.40))
+			L.draw_colored_polygon(PackedVector2Array([Vector2(3.0, 1.9), Vector2(4.6, 4.0), Vector2(5.4, 1.9)]), Color(0.30, 0.33, 0.40))
+			L.draw_colored_polygon(PackedVector2Array([Vector2(7.0, -1.9), Vector2(10.0, 0.0), Vector2(7.0, 1.9)]), Color(0.85, 0.22, 0.16))
 		_:
 			var ln := 9.0
 			L.draw_line(Vector2(-ln, 0.0), Vector2(-ln - 4.0 - rng.randf() * 3.0, 0.0), Color(1.0, 0.6, 0.2, 0.9), 2.2)

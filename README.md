@@ -20,7 +20,9 @@ Open `project.godot` in Godot 4 and press F5.
 * **Every carrier is unique** (Casablanca, Independence, Essex, Shinano battle-carrier, CVN-10 supercarrier...)
   and Yamato-class ships are far larger than everything else.
 * **Aircraft squadrons**: carriers launch a 3-plane squadron that moves and shoots as one when you fly it,
-  plus a second AI-controlled squadron. Idle aircraft stay near your ship and automatically shoot back.
+  plus a second AI-controlled squadron. Idle aircraft patrol near your ship, pick the nearest enemy they can
+  spot inside their leash and go on attack runs on their own (bombs, torpedoes, rockets, missiles) - they
+  always come back to refit when their weapons are empty.
 * **Auto secondaries**: big ships fire their medium/small secondary guns at close enemies automatically.
 * **Ramming**: ships collide and grind each other; damage scales with relative speed and the other
   ship's size, so a heavy battleship crushes a patrol boat.

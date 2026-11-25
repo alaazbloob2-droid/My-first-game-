@@ -22,9 +22,9 @@ const D := preload("res://data.gd")
 const WATER_SHADER := preload("res://water.gdshader")
 const WATER_FAST_SHADER := preload("res://water_fast.gdshader")
 
-const WORLD := 6500.0
+const WORLD := 9500.0
 const GRID := 900.0
-const CRATE_COUNT := 240
+const CRATE_COUNT := 420
 const MAX_DT := 0.05
 const TRAIL_POINTS := 14
 const MAX_SHOTS := 420
@@ -224,6 +224,7 @@ class Crate extends RefCounted:
 	var temp := false
 	var life := 0.0
 	var phase := 0.0
+	var cell := Vector2i.ZERO
 
 class Fx extends RefCounted:
 	var kind := 0   # 0 explosion 1 splash 2 muzzle flash 3 ring 4 smoke puff 5 tracer 6 text
@@ -374,7 +375,7 @@ func _ready() -> void:
 	_gen_islands()
 	_gen_zone()
 	for i in CRATE_COUNT:
-		crates.append(_new_crate())
+		crates.append(_new_crate(rng.randf() < 0.45))
 	player = Ship.new()
 	player.is_player = true
 	player.nick = "Player"
@@ -562,6 +563,12 @@ func _draw_zone() -> void:
 		var a := ring[i] - dir * 10.0
 		var b := ring[i] - dir * 30.0
 		zone_layer.draw_line(a, b, Color(1.0, 0.30, 0.22, 0.70), 3.0)
+	# supply hot-spots: wrecks near the map edge drop extra supplies fleets fight over
+	var pulse := 0.35 + 0.2 * sin(time * 2.2)
+	for i in wreck_pos.size():
+		var wp: Vector2 = wreck_pos[i]
+		zone_layer.draw_arc(wp, 260.0, 0.0, TAU, 40, Color(1.0, 0.82, 0.30, 0.35 + pulse * 0.4), 2.5)
+		zone_layer.draw_arc(wp, 200.0, 0.0, TAU, 36, Color(1.0, 0.82, 0.30, 0.18 + pulse * 0.3), 1.5)
 
 func _draw_reef(c: Node2D, r: float, sd: int) -> void:
 	var g := RandomNumberGenerator.new()
@@ -795,11 +802,18 @@ func _free_pos() -> Vector2:
 			return p
 	return Vector2.ZERO
 
-func _new_crate() -> Crate:
+func _new_crate(hot := false) -> Crate:
 	var c := Crate.new()
-	c.pos = _free_pos()
+	# supply hot-spots: destroyed cargo ships near the map edges drop twice the supplies,
+	# so fleets fight over the wrecks
+	if hot and not wreck_pos.is_empty() and rng.randf() < 0.72:
+		var wr := wreck_pos[rng.randi() % wreck_pos.size()]
+		c.pos = wr + Vector2.from_angle(rng.randf() * TAU) * rng.randf_range(40.0, 240.0)
+	else:
+		c.pos = _free_pos()
 	c.kind = rng.randi_range(0, 2) # 0 score, 1 health, 2 big score
 	c.phase = rng.randf() * TAU
+	c.cell = _cell(c.pos)
 	_cgrid_add(c)
 	return c
 
@@ -959,6 +973,14 @@ func _build_weapons(s: Ship) -> void:
 			m.y = float(md["y"]) * W
 			m.dir = float(md["dir"])
 			m.arc = float(md["arc"])
+			# realistic arcs: turret mounts are trained by hull position, not 360 spinners.
+			# mounts sitting aft of the bridge sweep towards the stern, fore mounts towards the bow.
+			if w.kind == int(D.KIND["shell"]):
+				if m.x < L * -0.02:
+					m.dir = PI
+					m.arc = minf(m.arc, 2.45)
+				elif m.x > L * 0.02:
+					m.arc = minf(m.arc, 2.45)
 			m.b = int(md["b"])
 			m.rot = m.dir
 			var dims := D.mount_dims(wd, m.b)
@@ -1154,13 +1176,13 @@ func _ship_l0(c: Node2D, ctx: Dictionary, flag: Color) -> void:
 	var modern: bool = ctx["modern"]
 	var is_cv: bool = ctx["cv"]
 	# waterline contact shadow, hull plating with a lit centre, rubbing strake
-	c.draw_colored_polygon(_scale_pts(hull, (L + 4.0) / L, (W + 3.2) / W), Color(0.02, 0.04, 0.07, 0.75))
-	_dshade(c, hull, hcol, 0.32, W * 0.5)
-	c.draw_polyline(_closed_pts(_scale_pts(hull, 0.992, 0.992)), hcol.lightened(0.28), 1.1)
+	c.draw_colored_polygon(_scale_pts(hull, (L + 4.0) / L, (W + 2.2) / W), Color(0.02, 0.04, 0.07, 0.65))
+	_dshade(c, hull, hcol, 0.26, W * 0.5)
+	c.draw_polyline(_closed_pts(_scale_pts(hull, 0.998, 0.998)), hcol.lightened(0.20), 0.6)
 	if not is_cv:
 		var dk := _scale_pts(hull, 0.965, 0.80)
 		_dshade(c, dk, dcol, 0.30, W * 0.4)
-		c.draw_polyline(_closed_pts(dk), dcol.darkened(0.35), 0.8)
+		c.draw_polyline(_closed_pts(dk), dcol.darkened(0.35), 0.5)
 		if not modern:
 			for k in range(-3, 4):
 				var y := float(k) * W * 0.095
@@ -1176,14 +1198,14 @@ func _ship_l0(c: Node2D, ctx: Dictionary, flag: Color) -> void:
 			c.draw_rect(Rect2(Vector2(sx, W * 0.53), Vector2(L * 0.07, W * 0.07)), hcol.darkened(0.25))
 			c.draw_rect(Rect2(Vector2(sx, -W * 0.60), Vector2(L * 0.07, W * 0.07)), hcol.darkened(0.25))
 		_dshade(c, fd, dcol, 0.16, W * 0.55)
-		c.draw_polyline(_closed_pts(fd), Color(0.08, 0.09, 0.10, 0.8), 1.2)
+		c.draw_polyline(_closed_pts(fd), Color(0.08, 0.09, 0.10, 0.55), 0.8)
 		c.draw_rect(Rect2(Vector2(L * 0.18, -W * 0.40), Vector2(L * 0.07, W * 0.22)), Color(0.17, 0.19, 0.21))
 		c.draw_rect(Rect2(Vector2(-L * 0.20, W * 0.14), Vector2(L * 0.07, W * 0.26)), Color(0.17, 0.19, 0.21))
 		c.draw_rect(Rect2(Vector2(-L * 0.04, -W * 0.40), Vector2(L * 0.07, W * 0.22)), Color(0.17, 0.19, 0.21))
 		for k in 8:
 			var px := -L * 0.44 + float(k) * L * 0.032
 			var py := -W * 0.34 + float(k % 3) * W * 0.07
-			_draw_small_plane(c, Vector2(px, py), 0.0, 0.42, Color(0.58, 0.60, 0.62))
+			_draw_small_plane(c, Vector2(px, py), 0.0, 0.30, Color(0.58, 0.60, 0.62))
 		_draw_structure(c, L * 0.10, W * 0.45, L * 0.11, W * 0.17, scol, 0)
 	for b in st["sup"]:
 		_draw_structure(c, float(b[0]) * L, 0.0, float(b[1]) * L, float(b[2]) * W, scol, 0)
@@ -1320,6 +1342,49 @@ func _ship_l1(c: Node2D, ctx: Dictionary, flag: Color) -> void:
 				c.draw_circle(vp, g.randf_range(0.7, 1.3), Color(0.10, 0.11, 0.13, 0.55))
 			else:
 				c.draw_rect(Rect2(vp, Vector2(g.randf_range(1.5, 3.0), g.randf_range(0.9, 1.8))), Color(0.12, 0.13, 0.15, 0.5))
+	if str(ctx["style"]) in ["ww2l", "ww2xl", "jpl", "jpxl"]:
+		_draw_bridge(c, ctx)
+
+func _draw_bridge(c: Node2D, ctx: Dictionary) -> void:
+	# proper battleship superstructure: tiered bridge tower, open windows, rangefinder,
+	# director and a stub antenna mast - the thing that was missing on Iowa/Yamato
+	var L: float = ctx["L"]
+	var W: float = ctx["W"]
+	var scol: Color = ctx["scol"]
+	var pagoda: bool = str(ctx["style"]) in ["jpl", "jpxl"]
+	var bx: float = float(ctx["st"]["mast"][0]) * L
+	var w1: float = W * 0.62
+	var w2: float = W * 0.44
+	var w3: float = W * 0.28
+	var stages: Array = [[bx - L * 0.055, bx + L * 0.075, w1], [bx - L * 0.028, bx + L * 0.048, w2]]
+	if pagoda:
+		stages.append([bx - L * 0.014, bx + L * 0.034, w3])
+	var pts: PackedVector2Array
+	for szi in stages.size():
+		var sg: Array = stages[szi]
+		var x0: float = sg[0]
+		var x1: float = sg[1]
+		var hw: float = sg[2] * 0.5
+		pts = PackedVector2Array([Vector2(x0, -hw * 0.45), Vector2(x1, -hw), Vector2(x1, hw), Vector2(x0, hw * 0.45)])
+		c.draw_colored_polygon(_scale_pts(pts, 1.12, 1.14), Color(0, 0, 0, 0.28))
+		_dshade(c, pts, scol.darkened(0.05 + 0.07 * float(szi)), 0.35, hw)
+		c.draw_polyline(_closed_pts(pts), scol.darkened(0.4), 0.6)
+	# open bridge windows right at the top block
+	var tx: float = stages[stages.size() - 1][0]
+	var thw: float = stages[stages.size() - 1][2] * 0.5
+	c.draw_rect(Rect2(Vector2(tx + 1.0, -thw * 0.52), Vector2(maxf((stages[stages.size() - 1][1] - tx) * 0.55, 2.6), thw * 1.04)), Color(0.05, 0.07, 0.09, 0.95))
+	c.draw_line(Vector2(tx + 1.0, -thw * 0.52), Vector2(tx + 1.0, thw * 0.52), Color(0.55, 0.60, 0.65), 0.5)
+	# rangefinder ears on the top block
+	var hx: float = float(stages[stages.size() - 1][1])
+	c.draw_line(Vector2(hx, -thw * 1.5), Vector2(hx, thw * 1.5), Color(0.10, 0.11, 0.13, 0.85), 1.1)
+	c.draw_line(Vector2(hx - 1.6, -thw), Vector2(hx, -thw), Color(0.35, 0.37, 0.40), 0.8)
+	c.draw_line(Vector2(hx - 1.6, thw), Vector2(hx, thw), Color(0.35, 0.37, 0.40), 0.8)
+	# fire-control director + stub mast above the tower
+	c.draw_rect(Rect2(Vector2(hx - 1.6, -1.3), Vector2(1.6, 2.6)), scol.darkened(0.3))
+	c.draw_line(Vector2(bx, 0.0), Vector2(bx - L * 0.02, -W * 0.75), Color(0.10, 0.11, 0.13, 0.85), 1.2)
+	c.draw_line(Vector2(bx - L * 0.02, -W * 0.75), Vector2(bx - L * 0.045, -W * 0.62), Color(0.10, 0.11, 0.13, 0.85), 1.0)
+	c.draw_circle(Vector2(bx - L * 0.045, -W * 0.62), maxf(1.2, W * 0.05), Color(0.13, 0.14, 0.16))
+	c.draw_circle(Vector2(bx - L * 0.045, -W * 0.62), maxf(0.7, W * 0.028), Color(0.55, 0.58, 0.62))
 
 func _ship_l2(c: Node2D, ctx: Dictionary) -> void:
 	var L: float = ctx["L"]
@@ -1379,7 +1444,7 @@ func _draw_parked(c: Node2D, aid: String, L: float, W: float) -> void:
 	var ad: Dictionary = D.AIR[aid]
 	var col: Color = ad["col"]
 	if str(ad["kind"]) == "heli":
-		c.draw_set_transform(Vector2(-L * 0.30, 0.0), 0.0, Vector2.ONE * float(ad["size"]) * 0.6)
+		c.draw_set_transform(Vector2(-L * 0.30, 0.0), 0.0, Vector2.ONE * float(ad["size"]) * 0.4)
 		c.draw_colored_polygon(_shift_pts(_ellipse_pts(7.0, 3.0, 10), Vector2(1.5, 2.0)), Color(0, 0, 0, 0.28))
 		c.draw_line(Vector2(-4.0, 0.0), Vector2(-17.0, 0.0), col.darkened(0.4), 1.6)
 		c.draw_colored_polygon(_ellipse_pts(6.5, 2.8, 10), col)
@@ -1391,7 +1456,7 @@ func _draw_parked(c: Node2D, aid: String, L: float, W: float) -> void:
 		var at := Vector2(-L * 0.20, 0.0)
 		if str(ad["n"]).begins_with("Recon"):
 			at = Vector2(-L * 0.38, 0.0)
-		_draw_small_plane(c, at, 0.0, 0.62 * float(ad["size"]), col)
+		_draw_small_plane(c, at, 0.0, 0.42 * float(ad["size"]), col)
 
 func _ellipse_pts(rx: float, ry: float, n: int) -> PackedVector2Array:
 	return _scale_pts(_circle_pts(1.0, n), rx, ry)
@@ -1422,9 +1487,9 @@ func _build_mount_visual(n: Node2D, w: WRT, m: MountRT) -> void:
 			n.draw.connect(_draw_mount_base.bind(n, wd, m))
 
 func _draw_gun_barrels(c: Node2D, wd: Dictionary, m: MountRT) -> void:
-	var bw := float(wd["bw"])
-	var bl := float(wd["bl"])
-	var tl := bl * 0.6 + 4.0
+	var bw := float(wd["bw"]) * D.MSCALE
+	var bl := float(wd["bl"]) * D.MSCALE
+	var tl := bl * 0.6 + 2.5
 	for k in m.b:
 		var y := (float(k) - float(m.b - 1) * 0.5) * m.bsp
 		var x0 := tl * 0.3
@@ -1435,9 +1500,9 @@ func _draw_gun_barrels(c: Node2D, wd: Dictionary, m: MountRT) -> void:
 		c.draw_rect(Rect2(Vector2(x0 + bl - 1.8, y - bw * 0.7), Vector2(1.8, bw * 1.4)), Color(0.05, 0.05, 0.06))
 
 func _draw_gun_roof(c: Node2D, wd: Dictionary, m: MountRT) -> void:
-	var bw := float(wd["bw"])
-	var bl := float(wd["bl"])
-	var tl := bl * 0.6 + 4.0
+	var bw := float(wd["bw"]) * D.MSCALE
+	var bl := float(wd["bl"]) * D.MSCALE
+	var tl := bl * 0.6 + 2.5
 	var tw := float(m.b) * m.bsp + 2.0
 	var metal := Color(0.40, 0.43, 0.48)
 	var pts: PackedVector2Array
@@ -1473,8 +1538,8 @@ func _draw_mount_base(c: Node2D, wd: Dictionary, m: MountRT) -> void:
 	var dark := Color(0.10, 0.11, 0.13)
 	match str(wd["vis"]):
 		"gun":
-			var bl := float(wd["bl"])
-			var tl := bl * 0.6 + 4.0
+			var bl := float(wd["bl"]) * D.MSCALE
+			var tl := bl * 0.6 + 2.5
 			var tw := float(m.b) * m.bsp + 2.0
 			var rb := maxf(tw, tl * 0.8) * 0.56
 			c.draw_circle(Vector2(1.0, 1.5), rb, Color(0, 0, 0, 0.28))
@@ -1489,7 +1554,7 @@ func _draw_mount_base(c: Node2D, wd: Dictionary, m: MountRT) -> void:
 			c.draw_circle(Vector2(-0.8, -0.8), 1.2, Color(1, 1, 1, 0.7))
 			c.draw_arc(Vector2(-1.6, 0.0), 1.8, -1.3, 1.3, 8, Color(0.2, 0.2, 0.22), 0.9)
 		"tubes":
-			var tl2 := float(wd.get("tl", 10.0))
+			var tl2 := float(wd.get("tl", 10.0)) * 0.75
 			var hh := float(m.b) * m.bsp + 1.0
 			c.draw_circle(Vector2.ZERO, tl2 * 0.5, Color(0, 0, 0, 0.25))
 			c.draw_circle(Vector2.ZERO, tl2 * 0.42, Color(0.20, 0.22, 0.25))
@@ -1618,7 +1683,9 @@ func _ac(shadow: bool, c: Color) -> Color:
 	return Color(0, 0, 0, 0.25) if shadow else c
 
 func _air_shapes(parent: Node2D, a: Air, shadow: bool) -> void:
-	var k := float(a.d["size"])
+	# aircraft are drawn at 0.6 scale: a scout plane should be a speck against a carrier,
+	# not a second ship parked on its deck
+	var k := float(a.d["size"]) * 0.6
 	var col: Color = a.d["col"]
 	var dk := col.darkened(0.4)
 	if str(a.d["kind"]) == "heli":
@@ -1746,8 +1813,10 @@ func _on_play(nick: String, ship_id: String) -> void:
 		S.d["nick"] = n
 		settings_dirty = true
 	var def := D.by_id(ship_id)
-	if not def.is_empty() and int(def["tier"]) > 1:
-		player.score = float(D.TIER_NEED[int(def["tier"]) - 1])
+	if def.is_empty() or int(def["tier"]) != 1:
+		for opt in D.of_tier(1):
+			def = opt
+			break
 	_spawn(player, def)
 	fire_lock = 0.4
 	cam.position = player.pos
@@ -2021,7 +2090,7 @@ func _auto_sec_aim(s: Ship, dt: float) -> void:
 	if s.sec_t > 0.0:
 		return
 	s.sec_t = 0.25
-	if s.sec_tgt != null and (not s.sec_tgt.alive or not _can_see(s, s.sec_tgt)):
+	if s.sec_tgt != null and (not s.sec_tgt.alive or s.sec_tgt.dive_t > 0.0 or not _can_see(s, s.sec_tgt)):
 		s.sec_tgt = null
 	if s.sec_tgt == null:
 		var best: Ship = null
@@ -2033,7 +2102,7 @@ func _auto_sec_aim(s: Ship, dt: float) -> void:
 				if not ship_grid.has(key):
 					continue
 				for o in ship_grid[key]:
-					if o == s or not o.alive:
+					if o == s or not o.alive or o.dive_t > 0.0:
 						continue
 					var d2 := s.pos.distance_squared_to(o.pos)
 					if d2 < bd and _can_see(s, o):
@@ -2069,6 +2138,9 @@ func _try_fire(s: Ship, w: WRT) -> bool:
 	if w.gap_t > 0.0 or w.total == 0:
 		return false
 	var wd := w.d
+	# submerged: only torpedo tubes work under water. Guns and missiles are on deck.
+	if s.dive_t > 0.0 and w.kind != int(D.KIND["torp"]):
+		return false
 	# fire from the mount CLOSEST to the aim point that still has a loaded barrel
 	var bm := -1
 	var bd := INF
@@ -2422,6 +2494,9 @@ func _shot_collide(sh: Shot, p0: Vector2) -> bool:
 	for o in cand:
 		if not o.alive or o == sh.src or o.invuln > 0.0:
 			continue
+		# a dived submarine only fears torpedoes and mines - shells and missiles scream overhead
+		if o.dive_t > 0.0 and sh.kind != int(D.KIND["torp"]) and sh.kind != int(D.KIND["mine"]):
+			continue
 		var reach: float = o.hl + mvl + 10.0
 		if o.pos.distance_squared_to(sh.pos) > reach * reach:
 			continue
@@ -2506,6 +2581,7 @@ func _damage(s: Ship, dmg: float, killer: Ship) -> void:
 		_add_text(s.pos + Vector2(rng.randf_range(-12.0, 12.0), -s.hl * 0.3), str(int(dd)), tc)
 	if s.is_player:
 		shake = maxf(shake, minf(dd * 0.15 + 3.0, 12.0) * S.f("shake"))
+		ui.hit_flash(minf(0.55, dd / maxf(s.max_hp, 1.0) * 2.2))
 		if s.hp > 0.0 and s.hp < s.max_hp * 0.25 and rng.randf() < 0.25:
 			audio.play_ui("alarm", -8.0)
 	if s.hp <= 0.0:
@@ -2670,6 +2746,9 @@ func _step_ship(s: Ship, dt: float) -> void:
 	s.pos += s.vel * dt
 	if s.dive_t > 0.0:
 		s.throttle = clampf(s.throttle, -0.4, 0.4)
+		# periscope wake + escaping air bubbles while running submerged
+		if fmod(time, 0.55) < dt:
+			_add_fx(3, s.pos + Vector2(rng.randf_range(-14.0, 14.0), rng.randf_range(-14.0, 14.0)), 7.0, 0.5, Color(0.8, 0.95, 1.0, 0.7))
 	var rad := s.hl * 0.6 + 4.0
 	var gkey2 := Vector2i(floori(s.pos.x / GRID), floori(s.pos.y / GRID))
 	if island_grid.has(gkey2):
@@ -3256,6 +3335,15 @@ func _cgrid_add(c: Crate) -> void:
 	else:
 		crate_grid[k] = [c]
 
+func _cgrid_move(c: Crate) -> void:
+	if _cell(c.pos) == c.cell:
+		return
+	var lst = crate_grid.get(c.cell)
+	if lst != null:
+		lst.erase(c)
+	_cgrid_add(c)
+	c.cell = _cell(c.pos)
+
 func _step_crates(dt: float) -> void:
 	var i := crates.size() - 1
 	while i >= 0:
@@ -3271,7 +3359,9 @@ func _step_crates(dt: float) -> void:
 	for s in ships:
 		if not s.alive:
 			continue
-		var rr := s.hl + 12.0
+		var rr := s.hl + 9.0
+		# supply magnet: bigger hulls pull floating supplies from further away
+		var mag := 46.0 + s.hl * 1.9
 		var c0 := _cell(s.pos)
 		for gx in range(c0.x - 1, c0.x + 2):
 			for gy in range(c0.y - 1, c0.y + 2):
@@ -3282,25 +3372,37 @@ func _step_crates(dt: float) -> void:
 				while j >= 0:
 					var cc: Crate = lst[j]
 					j -= 1
-					if s.pos.distance_squared_to(cc.pos) >= rr * rr:
+					var dd := s.pos.distance_to(cc.pos)
+					if dd >= mag:
+						continue
+					if dd >= rr:
+						cc.pos += (s.pos - cc.pos).normalized() * (40.0 + s.hl * 0.5) * dt
+						_cgrid_move(cc)
 						continue
 					var mul := 1.0 + 0.3 * float(s.tier - 1)
 					match cc.kind:
 						0:
-							s.score += 12.0 * mul
+							s.score += 7.0 * mul
 						1:
-							s.hp = minf(s.max_hp, s.hp + maxf(40.0, s.max_hp * 0.12))
+							s.hp = minf(s.max_hp, s.hp + maxf(30.0, s.max_hp * 0.10))
 						2:
-							s.score += 35.0 * mul
-					_add_fx(3, cc.pos, 22.0, 0.35, CRATE_COLORS[cc.kind])
+							s.score += 18.0 * mul
+					_add_fx(3, cc.pos, 16.0, 0.35, CRATE_COLORS[cc.kind])
 					if s.is_player:
 						audio.play_ui("pickup", -8.0)
 					lst.erase(cc)
 					if cc.temp:
 						crates.erase(cc)
 					else:
-						cc.pos = _free_pos()
+						cc.pos = Vector2.ZERO
+						var hot := rng.randf() < 0.45 and not wreck_pos.is_empty()
+						if hot:
+							var wr2 := wreck_pos[rng.randi() % wreck_pos.size()]
+							cc.pos = wr2 + Vector2.from_angle(rng.randf() * TAU) * rng.randf_range(40.0, 240.0)
+						else:
+							cc.pos = _free_pos()
 						cc.kind = rng.randi_range(0, 2)
+						cc.cell = _cell(cc.pos)
 						_cgrid_add(cc)
 
 func _add_fx(kind: int, p: Vector2, size: float, dur: float, col: Color = Color(1, 1, 1), ang: float = 0.0) -> Fx:
@@ -3484,6 +3586,9 @@ func _update_visuals(dt: float) -> void:
 		var on := shown and in_view
 		if not sinking:
 			var want := Color(1, 1, 1, 1) if shown else hidden
+			if shown and s.dive_t > 0.0:
+				# submerged: blue-green silhouette under the waterline
+				want = Color(0.42, 0.62, 0.72, 0.5)
 			if s.node.modulate != want:
 				s.node.modulate = want
 		var show_trail := on and trails_on
@@ -3850,10 +3955,10 @@ func _draw_crates() -> void:
 		var col: Color = CRATE_COLORS[cr.kind]
 		var p := cr.pos + Vector2(0.0, sin(time * 3.0 + cr.phase) * 2.0)
 		if glow:
-			crate_layer.draw_circle(p, 17.0, Color(col.r, col.g, col.b, 0.16))
-		crate_layer.draw_rect(Rect2(p + Vector2(-6, -4), Vector2(14, 14)), Color(0, 0, 0, 0.22))
-		crate_layer.draw_rect(Rect2(p + Vector2(-7, -7), Vector2(14, 14)), col)
-		crate_layer.draw_rect(Rect2(p + Vector2(-7, -7), Vector2(14, 14)), Color(0, 0, 0, 0.55), false, 1.5)
+			crate_layer.draw_circle(p, 11.0, Color(col.r, col.g, col.b, 0.14))
+		crate_layer.draw_rect(Rect2(p + Vector2(-4, -3), Vector2(10, 10)), Color(0, 0, 0, 0.22))
+		crate_layer.draw_rect(Rect2(p + Vector2(-5, -5), Vector2(10, 10)), col)
+		crate_layer.draw_rect(Rect2(p + Vector2(-5, -5), Vector2(10, 10)), Color(0, 0, 0, 0.5), false, 1.1)
 		if cr.kind == 1:
 			crate_layer.draw_line(p + Vector2(-4, 0), p + Vector2(4, 0), Color(1, 1, 1, 0.95), 2.5)
 			crate_layer.draw_line(p + Vector2(0, -4), p + Vector2(0, 4), Color(1, 1, 1, 0.95), 2.5)
@@ -3885,10 +3990,13 @@ func _draw_shots() -> void:
 			L.draw_circle(sh.pos, sh.sz, Color(1.0, 0.92, 0.6))
 			L.draw_circle(sh.pos, sh.sz * 0.55, Color(1, 1, 1))
 		elif sh.kind == K_TORP:
-			for k in range(1, 6):
-				L.draw_circle(sh.pos - dir * float(k) * 9.0, 2.6 - float(k) * 0.35, Color(1, 1, 1, 0.55 - float(k) * 0.09))
-			L.draw_line(sh.pos - dir * 11.0, sh.pos, Color(0.78, 0.82, 0.88), 3.6)
-			L.draw_circle(sh.pos, 3.2, Color(0.9, 0.25, 0.25))
+			# running just under the surface: dark hull, faint bubbles, thin wake crest
+			for k in range(1, 7):
+				L.draw_circle(sh.pos - dir * float(k) * 10.0, 2.0 - float(k) * 0.22, Color(0.85, 0.95, 1.0, 0.30 - float(k) * 0.038))
+			L.draw_line(sh.pos - dir * 15.0, sh.pos, Color(0.55, 0.72, 0.78, 0.35), 1.4)
+			L.draw_line(sh.pos - dir * 7.0, sh.pos, Color(0.08, 0.13, 0.16, 0.85), 3.2)
+			L.draw_circle(sh.pos, 3.0, Color(0.07, 0.11, 0.13, 0.9))
+			L.draw_circle(sh.pos, 1.5, Color(0.75, 0.16, 0.14, 0.8))
 		elif sh.kind == K_MISSILE or sh.kind == K_ROCKET:
 			_draw_missile(L, sh)
 		elif sh.kind == K_MINE:
@@ -4029,7 +4137,7 @@ func _can_see(obs: Ship, o: Ship) -> bool:
 	if o.reveal_t > 0.0:
 		f = 1.0
 	elif o.dive_t > 0.0:
-		f *= 0.4
+		f *= 0.22
 	elif o.smoke_t > 0.0:
 		f *= 0.3
 	var r := float(obs.def["det"]) * f

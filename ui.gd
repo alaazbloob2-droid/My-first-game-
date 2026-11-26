@@ -9,6 +9,8 @@ signal slot_clicked(idx: int)
 signal ability_clicked(idx: int)
 signal setting_changed(key: String)
 signal exit_requested
+signal host_requested
+signal join_requested(ip: String)
 
 const D := preload("res://data.gd")
 const SettingsScript := preload("res://settings.gd")
@@ -43,6 +45,9 @@ var settings_root: Control
 var name_edit: LineEdit
 var play_btn: Button
 var loading := 0.0
+var join_root: Control
+var join_ip_edit: LineEdit
+var join_err: Label
 
 var lbl_class: Label
 var lbl_level: Label
@@ -986,6 +991,7 @@ func _build_menu() -> void:
 	_rect(hint, 0.5, 1, 0.5, 1, -430, -32, 430, -10)
 
 	_build_login()
+	_build_join()
 	_build_results()
 	_goto("home", true)
 
@@ -1040,6 +1046,18 @@ func _page_home() -> Control:
 	play_btn.pressed.connect(_on_play_clicked)
 	ranked_btn = _make_button(v, "RANKED: OFF", 16, Vector2(620, 46), Color(0.3, 0.34, 0.4))
 	ranked_btn.pressed.connect(_toggle_ranked)
+	var net_row := HBoxContainer.new()
+	net_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	net_row.add_theme_constant_override("separation", 10)
+	v.add_child(net_row)
+	var host_btn := _make_button(net_row, "HOST ONLINE MATCH", 16, Vector2(300, 42), Color(0.16, 0.40, 0.30))
+	host_btn.pressed.connect(func():
+		audio_click()
+		host_requested.emit())
+	var join_btn := _make_button(net_row, "JOIN FRIEND (IP)", 16, Vector2(300, 42), Color(0.45, 0.33, 0.12))
+	join_btn.pressed.connect(func():
+		audio_click()
+		_open_join())
 	profile_lbl = _label(v, "", 14, TEXT)
 	profile_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	rank_lbl = _label(v, "", 15, WARN)
@@ -1636,6 +1654,82 @@ func _build_login() -> void:
 	hint2.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint2.custom_minimum_size = Vector2(420, 0)
 
+func _build_join() -> void:
+	join_root = Control.new()
+	root.add_child(join_root)
+	join_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	join_root.visible = false
+	var bg := ColorRect.new()
+	bg.color = Color(0.008, 0.025, 0.055, 0.94)
+	join_root.add_child(bg)
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var cc := CenterContainer.new()
+	join_root.add_child(cc)
+	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var card := _panel(cc, Color(0.03, 0.08, 0.15, 0.99), 28.0, 16)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 14)
+	card.add_child(v)
+	_label(v, "JOIN A FRIEND'S BATTLE", 20, Color(0.86, 0.69, 0.22)).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var note := _label(v, "The host presses HOST ONLINE MATCH and a public internet address appears on their screen. Type that address here - both must run the same version of the game.", 13, TEXT_DIM)
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.custom_minimum_size = Vector2(460, 0)
+	join_ip_edit = LineEdit.new()
+	join_ip_edit.placeholder_text = "host address (like 84.123.x.x or 192.168.1.20)"
+	join_ip_edit.custom_minimum_size = Vector2(0, 46)
+	join_ip_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	join_ip_edit.add_theme_font_size_override("font_size", 16)
+	var je := StyleBoxFlat.new()
+	je.bg_color = Color(0, 0, 0, 0.4)
+	je.set_corner_radius_all(10)
+	je.set_content_margin_all(8)
+	je.border_color = Color(1, 1, 1, 0.15)
+	je.set_border_width_all(1)
+	var jf := je.duplicate() as StyleBoxFlat
+	jf.border_color = Color(0.86, 0.69, 0.22)
+	jf.set_border_width_all(2)
+	join_ip_edit.add_theme_stylebox_override("normal", je)
+	join_ip_edit.add_theme_stylebox_override("focus", jf)
+	join_ip_edit.add_theme_color_override("font_color", Color.WHITE)
+	v.add_child(join_ip_edit)
+	join_ip_edit.text_submitted.connect(func(_t: String): _join_confirm())
+	join_err = _label(v, "", 12, Color(1.0, 0.5, 0.45))
+	join_err.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	v.add_child(row)
+	var go := _make_button(row, "JOIN BATTLE", 18, Vector2(0, 50), Color(0.45, 0.33, 0.12))
+	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	go.pressed.connect(_join_confirm)
+	var cancel := _make_button(row, "CANCEL", 14, Vector2(110, 50), Color(0.3, 0.34, 0.4))
+	cancel.pressed.connect(_join_cancel)
+	var hint := _label(v, "Same wifi? Ask the host for their LAN address (shown when they host). Port is 7070 UDP.", 11, TEXT_DIM)
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.custom_minimum_size = Vector2(460, 0)
+
+func _open_join() -> void:
+	if join_root == null:
+		return
+	join_ip_edit.text = ""
+	join_err.text = ""
+	join_root.visible = true
+
+func _join_cancel() -> void:
+	if join_root != null:
+		join_root.visible = false
+	audio_click()
+
+func _join_confirm() -> void:
+	if join_root == null:
+		return
+	var ip := join_ip_edit.text.strip_edges()
+	if ip.is_empty():
+		join_err.text = "Type the host's address first."
+		return
+	join_root.visible = false
+	join_requested.emit(ip)
+
 func _login_confirm() -> void:
 	var pin := login_pin.text.strip_edges()
 	if pin.is_empty():
@@ -2030,6 +2124,8 @@ func show_menu() -> void:
 		results_root.visible = false
 	if login_root != null:
 		login_root.visible = not S.logged_in and not guest_mode
+	if join_root != null:
+		join_root.visible = false
 	_refresh_menu_meta()
 	_fill_menu_cards(menu_tier)
 	_fill_progress()

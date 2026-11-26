@@ -2345,6 +2345,7 @@ func _spawn_shot(s: Ship, w: WRT, origin: Vector2, ang: float, tgt: Vector2, car
 		sh.tgt = tgt
 		sh.scan = 0.3
 		sh.life = float(wd["rng"]) / maxf(sh.spd, 1.0)
+		shots.append(sh)
 		if sh.kind == K_SHELL:
 			sh.sz = 1.6 + float(wd.get("bw", 2.0)) * 0.45
 			sh.col = Color(1.0, 0.85, 0.45)
@@ -2361,7 +2362,6 @@ func _spawn_shot(s: Ship, w: WRT, origin: Vector2, ang: float, tgt: Vector2, car
 			sh.vel = carry * 0.7
 			sh.life = 0.7
 			sh.hp = 10.0
-			shots.append(sh)
 		if net_mode == 1:
 			net_ev_shots.append([str(w.id), sh.pos, sh.ang, sh.vel, sh.tgt, ships.find(s)])
 			if net_ev_shots.size() > 160:

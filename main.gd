@@ -21,7 +21,6 @@ const SettingsScript := preload("res://settings.gd")
 const D := preload("res://data.gd")
 const WATER_SHADER := preload("res://water.gdshader")
 const WATER_FAST_SHADER := preload("res://water_fast.gdshader")
-const NetScript := preload("res://net.gd")
 
 const WORLD := 9500.0
 const GRID := 900.0
@@ -138,9 +137,6 @@ class Ship extends RefCounted:
 	var mark_t := 0.0
 	var invuln := 0.0
 	var sink_t := 0.0
-	var sink_max := 2.0
-	var sink_list := 0.0
-	var dmg_d := 0.0
 	var smoke_emit := 0.0
 	var fire_emit := 0.0
 	var has_pd := false
@@ -194,11 +190,6 @@ class Ship extends RefCounted:
 	var foam: Node2D
 	var parked: Node2D
 	var spinners: Array[Node2D] = []
-	var net_hw := -1
-	var net_tpos := Vector2.ZERO
-	var net_tang := 0.0
-	var net_init := false
-	var promo_wait := false
 
 class Shot extends RefCounted:
 	var pos := Vector2.ZERO
@@ -324,34 +315,6 @@ var bot_dmg := 1.0
 var bot_err := 0.05
 var bot_det := 1.0
 
-var net_mode := 0        # 0 single player, 1 host, 2 joined a friend
-var net_peer: MultiplayerPeer = null
-var net_seed := 0
-var net_ships: Dictionary = {}
-var net_in: Dictionary = {}
-var net_pend: Dictionary = {}
-var net_col: Dictionary = {}
-var net_nicks: Dictionary = {}
-var net_lastseen: Dictionary = {}
-var net_by_idx: Dictionary = {}
-var net_my_idx := -1
-var net_self_pid := -1
-var net_hello_sent := false
-var net_started := false
-var net_world_ready := false
-var net_wait_t := 0.0
-var net_join_ip := ""
-var net_ip_hint := ""
-var net_snap_acc := 0.0
-var net_crates_acc := 0.0
-var net_ev_shots: Array = []
-var net_ev_fx: Array = []
-var net_beacon: PacketPeerUDP = null
-var net_beacon_acc := 0.0
-var net_listen: PacketPeerUDP = null
-var net_matches: Dictionary = {}
-var bake_gen := 0
-var wgen := RandomNumberGenerator.new()
 var water_mat: ShaderMaterial
 var islands_root: Node2D
 var trails_root: Node2D
@@ -370,8 +333,6 @@ var zone_layer: Node2D
 
 func _ready() -> void:
 	rng.randomize()
-	wgen.randomize()
-	net_seed = int(wgen.seed)
 	S = SettingsScript.new()
 	premult = CanvasItemMaterial.new()
 	premult.blend_mode = CanvasItemMaterial.BLEND_MODE_PREMULT_ALPHA
@@ -468,12 +429,7 @@ func _setup_ui() -> void:
 	ui.map_world = WORLD
 	ui.map_zone = zone_pts
 	ui.setup(S)
-	ui.game = self
-	ui.exit_requested.connect(request_exit)
 	ui.play_pressed.connect(_on_play)
-	ui.host_requested.connect(_net_host)
-	ui.join_requested.connect(_net_client)
-	ui.match_picked.connect(_net_client)
 	ui.ship_picked.connect(_on_ship_picked)
 	ui.slot_clicked.connect(_select_weapon)
 	ui.ability_clicked.connect(_use_ability_player)
@@ -500,22 +456,22 @@ func _apply_difficulty() -> void:
 func _gen_islands() -> void:
 	var sizes: Array = []
 	for i in 9:
-		sizes.append(wgen.randf_range(240.0, 430.0))
+		sizes.append(rng.randf_range(240.0, 430.0))
 	for i in 28:
-		sizes.append(wgen.randf_range(110.0, 230.0))
+		sizes.append(rng.randf_range(110.0, 230.0))
 	for i in 34:
-		sizes.append(wgen.randf_range(50.0, 105.0))
+		sizes.append(rng.randf_range(50.0, 105.0))
 	for i in 50:
-		sizes.append(wgen.randf_range(16.0, 38.0))
+		sizes.append(rng.randf_range(16.0, 38.0))
 	var centers := PackedVector2Array()
 	for i in 16:
-		centers.append(Vector2(wgen.randf_range(-WORLD, WORLD), wgen.randf_range(-WORLD, WORLD)) * 0.86)
+		centers.append(Vector2(rng.randf_range(-WORLD, WORLD), rng.randf_range(-WORLD, WORLD)) * 0.86)
 	for sz in sizes:
 		var r: float = sz
 		for t in 60:
-			var p := Vector2(wgen.randf_range(-WORLD, WORLD), wgen.randf_range(-WORLD, WORLD)) * 0.93
-			if wgen.randf() < 0.7:
-				p = centers[wgen.randi() % centers.size()] + Vector2(wgen.randf_range(-1.0, 1.0), wgen.randf_range(-1.0, 1.0)) * wgen.randf_range(250.0, 1400.0)
+			var p := Vector2(rng.randf_range(-WORLD, WORLD), rng.randf_range(-WORLD, WORLD)) * 0.93
+			if rng.randf() < 0.7:
+				p = centers[rng.randi() % centers.size()] + Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0)) * rng.randf_range(250.0, 1400.0)
 			p = p.clamp(Vector2(-WORLD, -WORLD) * 0.94, Vector2(WORLD, WORLD) * 0.94)
 			var ok := true
 			for k in island_pos.size():
@@ -526,7 +482,7 @@ func _gen_islands() -> void:
 			if ok:
 				island_pos.append(p)
 				island_r.append(r)
-				island_sd.append(wgen.randi())
+				island_sd.append(rng.randi())
 				break
 	# spatial grid so projectiles only test nearby islands
 	for i in island_pos.size():
@@ -540,33 +496,18 @@ func _gen_islands() -> void:
 				island_grid[key].append(i)
 	_gen_decor()
 
-func _free_pos_g() -> Vector2:
-	for t in 50:
-		var p := Vector2(wgen.randf_range(-WORLD, WORLD), wgen.randf_range(-WORLD, WORLD)) * 0.95
-		if zone_k.size() > 0 and p.length() > _zone_radius_at(p) - 170.0:
-			continue
-		var ok := true
-		for i in island_pos.size():
-			var lim: float = island_r[i] + 140.0
-			if p.distance_squared_to(island_pos[i]) < lim * lim:
-				ok = false
-				break
-		if ok:
-			return p
-	return Vector2.ZERO
-
 func _gen_decor() -> void:
 	# shoals (slow ships down), wrecks and buoys scattered across the sea
 	for i in 70:
-		reef_pos.append(_free_pos_g())
-		reef_r.append(wgen.randf_range(60.0, 170.0))
-		reef_sd.append(wgen.randi())
+		reef_pos.append(_free_pos())
+		reef_r.append(rng.randf_range(60.0, 170.0))
+		reef_sd.append(rng.randi())
 	for i in 14:
-		wreck_pos.append(_free_pos_g())
-		wreck_rot.append(wgen.randf() * TAU)
-		wreck_sd.append(wgen.randi())
+		wreck_pos.append(_free_pos())
+		wreck_rot.append(rng.randf() * TAU)
+		wreck_sd.append(rng.randi())
 	for i in 60:
-		buoy_pos.append(_free_pos_g())
+		buoy_pos.append(_free_pos())
 		buoy_red.append(i % 2 == 0)
 	for i in reef_pos.size():
 		var rp := reef_pos[i]
@@ -580,9 +521,9 @@ func _gen_decor() -> void:
 
 func _gen_zone() -> void:
 	# irregular "warzone" border: a warped circle, not a square wall
-	var ph1 := wgen.randf() * TAU
-	var ph2 := wgen.randf() * TAU
-	var ph3 := wgen.randf() * TAU
+	var ph1 := rng.randf() * TAU
+	var ph2 := rng.randf() * TAU
+	var ph3 := rng.randf() * TAU
 	zone_k.clear()
 	zone_pts.clear()
 	for i in 48:
@@ -1874,9 +1815,6 @@ func _unhandled_input(e: InputEvent) -> void:
 
 func _on_play(nick: String, ship_id: String) -> void:
 	var n := nick.strip_edges()
-	if not D.nick_ok(n):
-		ui.toast("That nickname is not allowed - renamed.")
-		n = "Sailor"
 	player.nick = n if n != "" else "Player"
 	if n != "" :
 		S.d["nick"] = n
@@ -1887,24 +1825,11 @@ func _on_play(nick: String, ship_id: String) -> void:
 			def = opt
 			break
 	_spawn(player, def)
-	player.color = _player_paint()
 	fire_lock = 0.4
 	cam.position = player.pos
 	state = State.PLAYING
 	promo_open = false
 	death_pending = false
-	_ensure_missions()
-	battle_xp0 = int(S.d.get("xp", 0))
-	battle_rp0 = int(S.d.get("rp", 0))
-	battle_bp0 = int(S.d.get("bp", 0))
-	battle_kills = 0
-	battle_dmg = 0.0
-	battle_time = 0.0
-	battle_promos = 0
-	in_battle = true
-	S.d["battles"] = int(S.d.get("battles", 0)) + 1
-	S.mark_played(String(def["id"]))
-	settings_dirty = true
 	ui.show_game()
 	_refresh_loadout()
 	audio.play_ui("click")
@@ -1920,8 +1845,6 @@ func _on_ship_picked(ship_id: String, mode: String) -> void:
 		promo_open = false
 		var ratio := maxf(player.hp / player.max_hp, 0.6)
 		_apply_def(player, def, ratio)
-		if net_mode == 2:
-			_net_put([NetScript.M_PICK, str(def["id"])])
 		_add_fx(3, player.pos, player.hl * 1.8, 0.7, Color(0.5, 0.85, 1.0))
 		ui.hide_levelup()
 		ui.toast("Now commanding the %s" % str(def["name"]))
@@ -1931,9 +1854,6 @@ func _on_ship_picked(ship_id: String, mode: String) -> void:
 			return
 		death_pending = false
 		_spawn(player, def)
-		player.color = _player_paint()
-		if net_mode == 2:
-			_net_put([NetScript.M_PICK, str(def["id"])])
 		fire_lock = 0.4
 		cam.position = player.pos
 		state = State.PLAYING
@@ -1960,9 +1880,6 @@ func _toggle_air() -> void:
 	var p := player
 	if not p.alive or p.air == null:
 		return
-	if net_mode == 2:
-		ui.toast("Remote air control isn't in this version yet")
-		return
 	if not p.air.alive:
 		ui.toast("Aircraft is being rebuilt...")
 		return
@@ -1972,14 +1889,8 @@ func _toggle_air() -> void:
 	_refresh_loadout()
 
 func _use_ability_player(idx: int) -> void:
-	if state != State.PLAYING:
-		return
-	if net_mode == 2:
-		if player.alive and idx < player.ab_cd.size() and idx < player.def["abil"].size():
-			player.ab_cd[idx] = float(D.ABILITIES[str(player.def["abil"][idx])]["cd"])
-			_net_put([NetScript.M_ABILITY, idx])
-		return
-	_use_ability(player, idx)
+	if state == State.PLAYING:
+		_use_ability(player, idx)
 
 # push the current weapon / ability / aircraft set to the HUD
 func _refresh_loadout() -> void:
@@ -2298,21 +2209,14 @@ func _fire_effects(s: Ship, wd: Dictionary, origin: Vector2, ang: float) -> void
 		_add_fx(2, origin, 6.0, 0.08, Color(1.0, 0.9, 0.5), ang)
 	else:
 		_add_fx(4, origin, 12.0, 0.8, Color(0.9, 0.9, 0.9))
-	var near := origin.distance_squared_to(cam.position) < 2200.0 * 2200.0
 	if s.is_player:
 		audio.play(str(wd["snd"]), origin, 0.0)
 		var sk := 1.0
 		if vis == "gun":
 			sk = float(wd["bw"]) * 0.9
 		shake = maxf(shake, sk * S.f("shake"))
-	elif near:
+	elif origin.distance_squared_to(cam.position) < 2300.0 * 2300.0:
 		audio.play(str(wd["snd"]), origin, -4.0)
-	if near and vis == "gun" and float(wd["bw"]) >= 2.0:
-		# salvo drama: heavy broadsides rattle the camera even from other ships
-		shake = maxf(shake, (float(wd["bw"]) - 1.6) * 6.0 * S.f("shake"))
-		_add_fx(2, origin, big * 1.7, 0.2, Color(1.0, 0.75, 0.35), ang)
-		_add_fx(7, origin + Vector2.from_angle(ang) * 10.0, big * 2.4, 0.5, Color(1.0, 0.8, 0.5))
-		_add_fx(4, origin + Vector2.from_angle(ang) * 16.0, big * 1.5, 1.2, Color(0.75, 0.75, 0.78))
 
 func _spawn_shot(s: Ship, w: WRT, origin: Vector2, ang: float, tgt: Vector2, carry: Vector2 = Vector2.ZERO) -> void:
 	if shots.size() >= MAX_SHOTS:
@@ -2345,7 +2249,6 @@ func _spawn_shot(s: Ship, w: WRT, origin: Vector2, ang: float, tgt: Vector2, car
 		sh.tgt = tgt
 		sh.scan = 0.3
 		sh.life = float(wd["rng"]) / maxf(sh.spd, 1.0)
-		shots.append(sh)
 		if sh.kind == K_SHELL:
 			sh.sz = 1.6 + float(wd.get("bw", 2.0)) * 0.45
 			sh.col = Color(1.0, 0.85, 0.45)
@@ -2362,10 +2265,7 @@ func _spawn_shot(s: Ship, w: WRT, origin: Vector2, ang: float, tgt: Vector2, car
 			sh.vel = carry * 0.7
 			sh.life = 0.7
 			sh.hp = 10.0
-		if net_mode == 1:
-			net_ev_shots.append([str(w.id), sh.pos, sh.ang, sh.vel, sh.tgt, ships.find(s)])
-			if net_ev_shots.size() > 160:
-				net_ev_shots.clear()
+		shots.append(sh)
 
 # the closest visible enemy to the direction we are aiming in (within a ~28 degree cone)
 func _find_lock(s: Ship, origin: Vector2, aimpt: Vector2, max_range: float):
@@ -2669,20 +2569,13 @@ func _shot_expire(sh: Shot) -> void:
 	elif sh.kind == K_TORP:
 		_add_fx(1, sh.pos, 12.0, 0.45)
 	else:
-		var is_shell := sh.kind == K_SHELL
-		_add_fx(1, sh.pos, 16.0 if is_shell else 12.0, 0.55)
-		if is_shell:
-			# near-miss: a towering water column where the shell splashed down
-			_add_fx(8, sh.pos, maxf(24.0, sh.spl * 1.5), 1.25)
-		var chance := 0.7 if is_shell else 0.3
-		if sh.pos.distance_squared_to(cam.position) < 1500.0 * 1500.0 and rng.randf() < chance:
-			audio.play("splash", sh.pos, -3.0 if is_shell else -8.0)
+		_add_fx(1, sh.pos, 16.0 if sh.kind == K_SHELL else 12.0, 0.55)
+		if rng.randf() < 0.3 and sh.pos.distance_squared_to(cam.position) < 1500.0 * 1500.0:
+			audio.play("splash", sh.pos, -8.0)
 
 # ---------------- Damage / kills / progression ----------------
 
 func _damage(s: Ship, dmg: float, killer: Ship) -> void:
-	if net_mode == 2:
-		return
 	if not s.alive or s.invuln > 0.0:
 		return
 	var dd := dmg
@@ -2692,13 +2585,6 @@ func _damage(s: Ship, dmg: float, killer: Ship) -> void:
 	s.flash = 1.0
 	if killer != null:
 		killer.reveal_t = maxf(killer.reveal_t, 3.0)
-		if killer.alive:
-			killer.dmg_d += dd
-			if net_mode == 1 and killer.net_hw > 0:
-				_net_pend(killer.net_hw, 4, dd)
-			if killer.is_player:
-				battle_dmg += dd
-				_mission_bump("dmg", int(dd))
 	var by_player := killer != null and killer.is_player
 	if S.b("dmgnums") and dd >= 4.0 and (by_player or s.is_player):
 		var tc := Color(1.0, 0.5, 0.4) if s.is_player else Color(1.0, 0.95, 0.6)
@@ -2713,12 +2599,9 @@ func _damage(s: Ship, dmg: float, killer: Ship) -> void:
 
 func _kill(victim: Ship, killer: Ship) -> void:
 	victim.alive = false
+	victim.respawn = 4.0
 	victim.speed = 0.0
-	var vlen := _len(victim)
-	victim.sink_max = 2.0 if vlen < 90.0 else minf(16.0, 9.0 + float(victim.tier) * 1.6)
-	victim.sink_list = 0.5 if rng.randf() < 0.5 else -0.5
-	victim.sink_t = victim.sink_max
-	victim.respawn = victim.sink_max + 2.5
+	victim.sink_t = 2.0
 	victim.target = null
 	var big := _len(victim)
 	_add_fx(0, victim.pos, big * 0.9, 0.9)
@@ -2733,30 +2616,11 @@ func _kill(victim: Ship, killer: Ship) -> void:
 			killer.hp = minf(killer.max_hp, killer.hp + killer.max_hp * 0.08)
 			killer.kills += 1
 			if killer.is_player:
-				var xpg := 25 + victim.tier * 15
-				S.d["xp"] = int(S.d.get("xp", 0)) + xpg
-				_mission_bump("xp", xpg)
-				_gain_bp(xpg)
-				battle_kills += 1
-				S.d["kills"] = int(S.d.get("kills", 0)) + 1
-				_mission_bump("kills", 1)
+				S.d["xp"] = int(S.d.get("xp", 0)) + 25 + victim.tier * 15
 				if S.b("ranked_mode"):
 					S.d["rp"] = maxi(0, int(S.d.get("rp", 0)) + 12 + victim.tier * 3)
 				settings_dirty = true
-			if net_mode == 1 and killer.net_hw > 0:
-				_net_pend(killer.net_hw, 0, 25.0 + float(victim.tier) * 15.0)
-				if S.b("ranked_mode"):
-					_net_pend(killer.net_hw, 1, 12.0 + float(victim.tier) * 3.0)
-				_net_pend(killer.net_hw, 2, maxi(1.0, (25.0 + float(victim.tier) * 15.0) / 25.0))
-				_net_pend(killer.net_hw, 3, 1.0)
 	ui.add_feed("%s sank %s" % [killer_name, victim.nick])
-	if net_mode == 1:
-		_net_bcast([NetScript.M_FEED, "%s sank %s" % [killer_name, victim.nick]])
-		if victim.net_hw > 0:
-			var prog2 := D.tier_progress(victim.score, victim.tier)
-			var drop2 := 3 if prog2 < 0.2 else (2 if prog2 < 0.6 else 1)
-			var rpen := -25.0 if S.b("ranked_mode") else 0.0
-			_net_send_to(victim.net_hw, [NetScript.M_DIED, ships.find(victim), killer_name, int(victim.score), victim.tier, maxi(1, victim.tier - drop2), prog2, rpen])
 	for i in 4 + victim.tier * 2:
 		var c := Crate.new()
 		c.pos = victim.pos + Vector2(rng.randf_range(-60.0, 60.0), rng.randf_range(-60.0, 60.0))
@@ -2817,123 +2681,16 @@ func _check_promotion(s: Ship) -> void:
 		return
 	var nt := s.tier + 1
 	if s.is_player:
-		battle_promos += 1
-		_mission_bump("promo", 1)
 		if not promo_open:
 			promo_open = true
 			ui.show_levelup(nt, D.of_tier(nt))
 			ui.toast("Promotion available - choose a ship!")
 			audio.play_ui("levelup")
-	elif s.net_hw > 0:
-		s.promo_wait = true
-		_net_send_to(s.net_hw, [NetScript.M_PROMO, ships.find(s), s.tier + 1])
 	else:
 		var opts := D.of_tier(nt)
 		var def: Dictionary = opts[rng.randi() % opts.size()]
 		_apply_def(s, def, maxf(s.hp / s.max_hp, 0.6))
 		_add_fx(3, s.pos, s.hl * 1.6, 0.6, Color(0.5, 0.85, 1.0))
-
-func _player_paint() -> Color:
-	var pk := str(S.d.get("paint", "navy"))
-	if D.PAINTS.has(pk):
-		return D.PAINTS[pk]["c"]
-	return Color(0.30, 0.65, 1.0)
-
-func _gain_bp(xp_amount: int) -> void:
-	S.d["bp"] = int(S.d.get("bp", 0)) + maxi(1, xp_amount / 25)
-
-func _mission_bump(key: String, amt: int) -> void:
-	_ensure_missions()
-	var k := "m_" + key
-	S.d[k] = int(S.d.get(k, 0)) + amt
-	settings_dirty = true
-
-func _mission_day() -> int:
-	return int(Time.get_unix_time_from_system() / 86400.0)
-
-func _ensure_missions() -> void:
-	var day := _mission_day()
-	if int(S.d.get("m_day", 0)) != day:
-		S.d["m_day"] = day
-		S.d["m_gift"] = 0
-		S.d["m_kills"] = 0
-		S.d["m_dmg"] = 0
-		S.d["m_xp"] = 0
-		S.d["m_crates"] = 0
-		settings_dirty = true
-
-func get_missions() -> Array:
-	_ensure_missions()
-	var day := _mission_day()
-	var out: Array = []
-	for i in 3:
-		var mi := (day * 7 + i * 2) % D.BP_MISSIONS.size()
-		var m: Dictionary = D.BP_MISSIONS[mi]
-		var diff := mini(2, (day + i) % 3)
-		var tgt := int(m["t"][diff])
-		var bit := 1 << (diff * 4 + i)
-		var have := int(S.d.get("m_" + str(m["k"]), 0))
-		out.append({"n": str(m["n"]) % tgt, "k": str(m["k"]), "have": have, "need": tgt, "reward": int(m["r"]), "done": have >= tgt, "claimed": (int(S.d.get("m_gift", 0)) & bit) != 0, "slot_bit": bit})
-	return out
-
-func claim_mission(slot_bit: int, reward: int) -> void:
-	if (int(S.d.get("m_gift", 0)) & slot_bit) != 0:
-		return
-	S.d["m_gift"] = int(S.d.get("m_gift", 0)) | slot_bit
-	S.d["bp"] = int(S.d.get("bp", 0)) + reward
-	settings_dirty = true
-	audio.play_ui("pickup", -4.0)
-
-func request_exit() -> void:
-	if net_mode != 0:
-		_net_shutdown()
-	in_battle = false
-	ui.in_battle = false
-	if state == State.MENU:
-		return
-	var xpn := int(S.d.get("xp", 0))
-	var rpn := int(S.d.get("rp", 0))
-	var bpn := int(S.d.get("bp", 0))
-	var meta1 := D.level_progress(xpn)
-	var res := {
-		"kills": battle_kills,
-		"dmg": int(battle_dmg),
-		"score": int(player.score),
-		"time": int(battle_time),
-		"xp0": battle_xp0, "xp1": xpn,
-		"rp0": battle_rp0, "rp1": rpn,
-		"bp0": battle_bp0, "bp": maxi(0, bpn - battle_bp0),
-		"lvl0": int(D.level_progress(battle_xp0)["lvl"]), "lvl1": int(meta1["lvl"]),
-		"xp_have": int(meta1["have"]), "xp_need": int(meta1["need"]),
-		"ri0": D.rank_i_from_rp(battle_rp0), "ri1": D.rank_i_from_rp(rpn),
-		"ranked": S.b("ranked_mode"),
-		"promos": battle_promos,
-	}
-	S.d["best"] = maxi(int(S.d.get("best", 0)), int(player.score))
-	if player.alive:
-		player.alive = false
-		player.sink_t = 0.0
-		player.respawn = 0.0
-		if player.air != null:
-			player.air.alive = false
-			if player.air.node != null:
-				player.air.node.visible = false
-			if player.air.shadow != null:
-				player.air.shadow.visible = false
-		for a2 in player.wing:
-			a2.alive = false
-			if a2.node != null:
-				a2.node.visible = false
-	promo_open = false
-	death_pending = false
-	ctrl_air = false
-	state = State.MENU
-	audio.set_engine(false, 0.0)
-	audio.set_rotor(false, 0.0)
-	S.season_check()
-	S.store_account()
-	S.save_file()
-	ui.show_battle_results(res)
 
 func _damage_air(a: Air, dmg: float, attacker = null) -> void:
 	if not a.alive:
@@ -2986,8 +2743,6 @@ func _step_ship(s: Ship, dt: float) -> void:
 	var target_speed := s.throttle * float(d["spd"]) * (1.45 if boost else 1.0)
 	if s.flood_t > 0.0:
 		target_speed *= 0.7
-	if s.dive_t > 0.0:
-		target_speed *= 1.25
 	var gkey := Vector2i(floori(s.pos.x / GRID), floori(s.pos.y / GRID))
 	if reef_grid.has(gkey):
 		for i in reef_grid[gkey]:
@@ -3000,7 +2755,7 @@ func _step_ship(s: Ship, dt: float) -> void:
 	s.vel = Vector2.from_angle(s.angle) * s.speed
 	s.pos += s.vel * dt
 	if s.dive_t > 0.0:
-		s.throttle = clampf(s.throttle, -0.7, 0.7)
+		s.throttle = clampf(s.throttle, -0.4, 0.4)
 		# periscope wake + escaping air bubbles while running submerged
 		if fmod(time, 0.55) < dt:
 			_add_fx(3, s.pos + Vector2(rng.randf_range(-14.0, 14.0), rng.randf_range(-14.0, 14.0)), 7.0, 0.5, Color(0.8, 0.95, 1.0, 0.7))
@@ -3674,7 +3429,6 @@ func _step_crates(dt: float) -> void:
 					_add_fx(3, cc.pos, 16.0, 0.35, CRATE_COLORS[cc.kind])
 					if s.is_player:
 						audio.play_ui("pickup", -8.0)
-						_mission_bump("crates", 1)
 					lst.erase(cc)
 					if cc.temp:
 						crates.erase(cc)
@@ -3702,10 +3456,6 @@ func _add_fx(kind: int, p: Vector2, size: float, dur: float, col: Color = Color(
 	f.ang = ang
 	f.sd = rng.randf() * TAU
 	fxs.append(f)
-	if net_mode == 1 and size >= 6.0:
-		net_ev_fx.append([kind, p, size, dur, f.col, f.ang])
-		if net_ev_fx.size() > 160:
-			net_ev_fx.clear()
 	return f
 
 func _add_text(p: Vector2, text: String, col: Color) -> void:
@@ -3724,14 +3474,6 @@ func _step_fx(dt: float) -> void:
 
 # ---------------- Frame update ----------------
 
-var in_battle := false
-var battle_xp0 := 0
-var battle_rp0 := 0
-var battle_bp0 := 0
-var battle_kills := 0
-var battle_dmg := 0.0
-var battle_time := 0.0
-var battle_promos := 0
 var settings_dirty := false
 var save_timer := 0.0
 
@@ -3739,14 +3481,7 @@ func _process(delta: float) -> void:
 	var dt := minf(delta, MAX_DT)
 	time += dt
 	vp_size = get_viewport_rect().size
-	_net_poll()
-	_net_match_listen(dt)
-	if net_mode == 1:
-		_net_host_apply(dt)
-	if net_mode == 2:
-		_net_client_input(dt)
-	else:
-		_player_input(dt)
+	_player_input(dt)
 	air_alive.clear()
 	for s in ships:
 		if s.air != null and s.air.alive:
@@ -3778,30 +3513,19 @@ func _process(delta: float) -> void:
 				s.lod_dt = 0.0
 			else:
 				s.lod_dt = 0.0
-			if (not s.is_player or ctrl_air) and s.net_hw <= 0:
+			if not s.is_player or ctrl_air:
 				_bot_update(s, sdt)
-			if net_mode == 2:
-				_net_mirror_step(s, sdt)
-			else:
-				_step_ship(s, sdt)
-				if s.alive and (s.air != null or s.air2 != null or s.wing.size() > 0 or s.wing2.size() > 0):
-					_step_air(s, sdt)
+			_step_ship(s, sdt)
+			if s.alive and (s.air != null or s.air2 != null or s.wing.size() > 0 or s.wing2.size() > 0):
+				_step_air(s, sdt)
 			if s.mark_t > 0.0:
 				marked = true
 		else:
 			if s.sink_t > 0.0:
 				s.sink_t -= dt
-				if s.sink_max > 4.0:
-					if fmod(time, 0.5) < dt:
-						var fp := s.pos + Vector2.from_angle(s.angle + s.sink_list * (1.0 - s.sink_t / s.sink_max)) * rng.randf_range(-_len(s) * 0.35, _len(s) * 0.35)
-						_add_fx(0, fp, _len(s) * 0.35, 0.8)
-						_add_fx(4, fp, _len(s) * 0.55, 1.8, Color(0.16, 0.16, 0.16))
-				if s.sink_t <= 0.0 and s.sink_max > 4.0:
-					_add_fx(8, s.pos, _len(s) * 1.3, 1.4)
-					audio.play("sink", s.pos, -2.0)
-			if not s.is_player and s.net_hw <= 0:
+			if not s.is_player:
 				s.respawn -= dt
-				if s.respawn <= 0.0 and world_ready and net_mode != 2:
+				if s.respawn <= 0.0 and world_ready:
 					_spawn_bot(s)
 	_pt("ships", t0)
 	if death_pending:
@@ -3810,16 +3534,12 @@ func _process(delta: float) -> void:
 			death_pending = false
 			ui.show_respawn(death_info, D.of_tier(int(death_info["to"])))
 	t0 = Time.get_ticks_usec()
-	if net_mode == 2:
-		_net_step_shots(dt)
-	else:
-		_build_ship_grid()
-		_step_shots(dt)
+	_build_ship_grid()
+	_step_shots(dt)
 	_pt("shots", t0)
 	crate_acc += dt
 	if crate_acc >= 0.1:
-		if net_mode != 2:
-			_step_crates(crate_acc)
+		_step_crates(crate_acc)
 		crate_acc = 0.0
 	_step_fx(dt)
 	_update_camera(dt)
@@ -3839,11 +3559,6 @@ func _process(delta: float) -> void:
 	_update_hud(dt)
 	_pt("hud", t0)
 	_adapt_quality(dt)
-	if state == State.PLAYING and player.alive:
-		battle_time += dt
-	if net_mode == 1:
-		_net_host_frame(dt)
-		_net_beacon(dt)
 	prof["frame"] = lerpf(float(prof.get("frame", delta * 1000.0)), delta * 1000.0, 0.1)
 	if settings_dirty:
 		save_timer -= dt
@@ -3931,12 +3646,9 @@ func _update_visuals(dt: float) -> void:
 		s.shadow.rotation = s.angle
 		var sp_ratio := clampf(absf(s.speed) / float(s.def["spd"]), 0.0, 1.0)
 		if sinking:
-			var k := clampf(s.sink_t / s.sink_max, 0.0, 1.0)
+			var k := clampf(s.sink_t / 2.0, 0.0, 1.0)
 			s.node.modulate = Color(k, k, k, k)
 			s.node.scale = Vector2.ONE * (0.85 + 0.15 * k)
-			s.body.rotation = s.angle + s.sink_list * (1.0 - k) * 0.6
-			if k < 0.5 and fmod(time, 0.35) < dt:
-				_add_fx(8, s.pos + Vector2.from_angle(rng.randf() * TAU) * _len(s) * rng.randf_range(0.1, 0.45), 14.0, 0.8)
 			s.tag.visible = false
 			continue
 		var show_tag := on and s.seen and (names or bars)
@@ -4707,14 +4419,11 @@ func _flag_overlay(s: Ship, ctx: Dictionary) -> void:
 		var cap := _add_poly(s.body, _scale_pts(_circle_pts(fr * 0.5, 12), 1.4, 1.0), Color(0.03, 0.03, 0.04))
 		cap.position = fp
 
-func _run_bake(rebuild := false) -> void:
-	var my_gen := bake_gen
+func _run_bake() -> void:
 	var total := bake_jobs.size()
 	var done := 0
 	var i := 0
 	while i < total:
-		if bake_gen != my_gen:
-			return
 		var batch: Array = []
 		var px := 0
 		while i < total and batch.size() < 14:
@@ -4751,87 +4460,17 @@ func _run_bake(rebuild := false) -> void:
 			vp2.queue_free()
 			done += 1
 		ui.set_loading(float(done) / float(maxi(total, 1)))
-	if bake_gen != my_gen:
-		return
-	if rebuild:
-		_apply_static_bake()
-	else:
-		_finish_world()
+	_finish_world()
 
 func _finish_world() -> void:
 	if world_ready:
 		return
 	world_ready = true
 	_build_world_visuals()
-	if net_mode != 2:
-		for i in S.i("bots"):
-			_add_bot()
+	for i in S.i("bots"):
+		_add_bot()
 	_apply_quality()
 	ui.set_loading(1.0)
-
-func _apply_static_bake() -> void:
-	for c in islands_root.get_children():
-		c.queue_free()
-	_build_world_visuals()
-	if zone_layer != null:
-		zone_layer.queue_redraw()
-
-func _is_static_bake_key(k: String) -> bool:
-	return k.begins_with("il") or k.begins_with("ih") or k.begins_with("rf") or (k.begins_with("w") and not k.contains(":"))
-
-# received WORLD from a host: rebuild the exact same sea the host fights on
-func _build_static_world(seedv: int) -> void:
-	wgen.seed = seedv
-	bake_gen += 1
-	for c in islands_root.get_children():
-		c.queue_free()
-	island_pos = PackedVector2Array()
-	island_r = PackedFloat32Array()
-	island_sd = []
-	island_grid.clear()
-	reef_pos = PackedVector2Array()
-	reef_r = PackedFloat32Array()
-	reef_sd = []
-	reef_grid.clear()
-	wreck_pos = PackedVector2Array()
-	wreck_rot = PackedFloat32Array()
-	wreck_sd = []
-	buoy_pos = PackedVector2Array()
-	buoy_red = []
-	zone_k = PackedFloat32Array()
-	zone_pts = PackedVector2Array()
-	var keep: Array = []
-	for j in bake_jobs:
-		if not _is_static_bake_key(str(j["key"])):
-			keep.append(j)
-	bake_jobs = keep
-	for k in tex.keys():
-		if _is_static_bake_key(str(k)):
-			tex.erase(k)
-	for k in tex_sc.keys():
-		if _is_static_bake_key(str(k)):
-			tex_sc.erase(k)
-	for k in bake_keys.keys():
-		if _is_static_bake_key(str(k)):
-			bake_keys.erase(k)
-	_gen_islands()
-	_gen_zone()
-	# menu demo ships are not part of this match
-	for s2 in ships.duplicate():
-		if s2 != player:
-			ships.erase(s2)
-			if s2.node != null:
-				s2.node.queue_free()
-	follow = null
-	world_ready = true
-	_build_world_visuals()
-	zone_layer.queue_redraw()
-	ui.map_isl_pos = island_pos
-	ui.map_isl_r = island_r
-	ui.map_zone = zone_pts
-	if S.b("bake"):
-		_queue_world_jobs()
-		_run_bake(true)
 
 func _build_world_visuals() -> void:
 	for i in island_pos.size():
@@ -4948,800 +4587,3 @@ func _pt(name: String, t0: int) -> void:
 	var ms := float(Time.get_ticks_usec() - t0) / 1000.0
 	prof[name] = lerpf(float(prof.get(name, ms)), ms, 0.1)
 
-
-# ---------------- Online multiplayer: HOST MATCH / JOIN MATCH (v1) ----------------
-# The host runs the whole battle (bots, damage, physics, projects, AI) like single
-# player. Friends receive: the world seed, 15 Hz ship snapshots, shot spawn events,
-# big effect events and battle progress. A client's inputs (steer, throttle, aim,
-# fire, respawn pick, ability) are sent up and applied by the host, so everyone
-# sees a fully consistent battle. UPnP is used on the host to auto-open the port.
-
-func _net_put(msg: Array, full := false) -> void:
-	if net_peer == null:
-		return
-	net_peer.put_var(msg, full)
-
-func _net_send_to(pid: int, msg: Array) -> void:
-	if net_peer == null:
-		return
-	var ep = net_peer.get_peer(pid)
-	if ep == null:
-		net_peer.put_var(msg)
-	else:
-		ep.put_var(msg)
-
-func _net_pend(pid: int, k: int, v: float) -> void:
-	if not net_pend.has(pid):
-		net_pend[pid] = [0.0, 0.0, 0.0, 0.0, 0.0]
-	net_pend[pid][k] = float(net_pend[pid][k]) + v
-
-func _net_shutdown() -> void:
-	net_mode = 0
-	if net_beacon != null:
-		net_beacon.close()
-		net_beacon = null
-	if net_listen != null:
-		net_listen.close()
-		net_listen = null
-	net_matches.clear()
-	net_hello_sent = false
-	net_started = false
-	net_world_ready = false
-	net_my_idx = -1
-	net_self_pid = -1
-	net_ships.clear()
-	net_in.clear()
-	net_pend.clear()
-	net_col.clear()
-	net_nicks.clear()
-	net_lastseen.clear()
-	net_by_idx.clear()
-	net_ev_shots.clear()
-	net_ev_fx.clear()
-	if net_peer != null:
-		net_peer.close()
-	net_peer = null
-
-func _net_host() -> void:
-	if net_mode != 0:
-		return
-	if not world_ready:
-		ui.toast("World is still loading - one moment.")
-		return
-	var res: Array = NetScript.setup_upnp()
-	if bool(res[0]):
-		net_ip_hint = str(res[1])
-		ui.set_host_addr("%s:%d" % [net_ip_hint, NetScript.PORT])
-		ui.toast("Hosting! Friend picks JOIN and types: %s:%d" % [net_ip_hint, NetScript.PORT])
-	else:
-		var lan := _local_ip_hint()
-		if lan.begins_with("local port"):
-			ui.set_host_addr(lan)
-			ui.toast("Match up on the local network - others find it in the match list.")
-		else:
-			ui.set_host_addr("%s:%d" % [lan, NetScript.PORT])
-			ui.toast("Local match up - friends on YOUR wifi can join %s" % lan)
-		ui.toast("Internet join needs port %d UDP open (UPnP said: %s)." % [NetScript.PORT, str(res[2])])
-	var peer := ENetMultiplayerPeer.new()
-	var err: int = peer.create_server(NetScript.PORT, 4)
-	if err != OK:
-		net_mode = 0
-		ui.toast("Could not open port %d (already used?)" % NetScript.PORT)
-		net_peer = null
-		return
-	net_mode = 1
-	net_peer = peer
-	net_beacon = PacketPeerUDP.new()
-	net_beacon.set_broadcast_enabled(true)
-	net_beacon_acc = 1.0
-	var nick := str(S.d.get("nick", "Admiral"))
-	if not D.nick_ok(nick):
-		nick = "Admiral"
-	var start := "pt_boat"
-	for opt in D.of_tier(1):
-		start = str(opt["id"])
-		break
-	_on_play(nick, start)
-
-func _local_ip_hint() -> String:
-	var ip := ""
-	for a in IP.get_local_addresses():
-		var s := str(a)
-		if s.begins_with("192.168.") or s.begins_with("10.") or s.begins_with("172.16."):
-			ip = s
-			break
-	return ip if ip != "127.0.0.1" else "local port %d" % NetScript.PORT
-
-func _net_client(ipraw: String) -> void:
-	if net_mode != 0:
-		return
-	var ip := ipraw.strip_edges()
-	var port := NetScript.PORT
-	if ip.contains(":"):
-		var parts := ip.split(":")
-		ip = parts[0]
-		if parts.size() > 1 and int(parts[1]) > 0:
-			port = int(parts[1])
-	if ip == "":
-		return
-	var peer := ENetMultiplayerPeer.new()
-	var err: int = peer.create_client(ip, port)
-	if err != OK:
-		ui.toast("Bad address - try again")
-		net_peer = null
-		return
-	net_mode = 2
-	net_peer = peer
-	net_my_idx = -1
-	net_self_pid = -1
-	net_hello_sent = false
-	net_started = false
-	net_world_ready = false
-	net_join_ip = ip
-	net_wait_t = time
-	ui.toast("Joining %s ..." % ip)
-
-func _net_poll() -> void:
-	if net_peer == null:
-		return
-	net_peer.poll()
-	var st := int(net_peer.get_connection_status())
-	if net_mode == 2 and st != MultiplayerPeer.CONNECTION_CONNECTED:
-		if st == MultiplayerPeer.CONNECTION_CONNECTING:
-			if time - net_wait_t > 10.0:
-				ui.toast("No answer from %s" % net_join_ip)
-				_net_shutdown()
-		else:
-			ui.toast("The host closed the match")
-			var was_in := state != State.MENU
-			_net_shutdown()
-			if was_in:
-				request_exit()
-		return
-	if net_mode == 2 and not net_hello_sent and state == State.MENU:
-		net_hello_sent = true
-		var nick := str(S.d.get("nick", "Captain"))
-		if not D.nick_ok(nick):
-			nick = "Captain"
-		_net_put([NetScript.M_HELLO, nick, str(S.d.get("paint", "navy")), net_peer.get_unique_id()])
-	while net_peer.get_available_packet_count() > 0:
-		var msg: Variant = net_peer.get_var()
-		var sender := int(net_peer.get_packet_peer())
-		if msg is Array and not (msg as Array).is_empty():
-			_net_msg(msg as Array, sender)
-
-func _net_msg(msg: Array, sender: int) -> void:
-	match int(msg[0]):
-		NetScript.M_HELLO:
-			if net_mode != 1:
-				return
-			var nick := str(msg[1]).strip_edges()
-			if nick == "" or not D.nick_ok(nick):
-				nick = "Sailor"
-			var col := Color(0.30, 0.65, 1.0)
-			if D.PAINTS.has(str(msg[2])):
-				col = D.PAINTS[str(msg[2])]["c"]
-			var def: Dictionary = {}
-			for opt in D.of_tier(1):
-				def = opt
-				break
-			if def.is_empty():
-				return
-			var uid := sender if int(msg[3]) <= 0 else int(msg[3])
-			var b := Ship.new()
-			ships.append(b)
-			_spawn(b, def)
-			b.nick = nick
-			b.color = col
-			b.name_label.text = nick
-			b.is_player = false
-			b.net_hw = uid
-			b.invuln = 3.0
-			net_ships[uid] = b
-			net_in[uid] = [false, false, false, false, false, Vector2.ZERO, false, false, 0]
-			net_col[uid] = col
-			net_nicks[uid] = nick
-			net_lastseen[uid] = time
-			net_pend[uid] = [0.0, 0.0, 0.0, 0.0, 0.0]
-			_net_put([NetScript.M_WORLD, net_seed, ships.size() - 1, uid], true)
-			_net_bcast([NetScript.M_FEED, "%s joined the battle" % nick])
-		NetScript.M_INPUT:
-			if net_mode != 1 or not net_ships.has(sender):
-				return
-			net_in[sender] = msg
-			net_lastseen[sender] = time
-		NetScript.M_ABILITY:
-			if net_mode != 1 or not net_ships.has(sender):
-				return
-			net_lastseen[sender] = time
-			_use_ability(net_ships[sender], int(msg[1]))
-		NetScript.M_PICK:
-			if net_mode != 1 or not net_ships.has(sender):
-				return
-			net_lastseen[sender] = time
-			_net_pick(net_ships[sender], sender, str(msg[1]))
-		NetScript.M_WORLD:
-			if net_mode != 2:
-				return
-			if msg.size() < 4:
-				return
-			var wpid := int(msg[3])
-			if wpid != net_self_pid and (net_self_pid != -1 or wpid != net_peer.get_unique_id()):
-				return
-			_net_world_start(int(msg[1]), int(msg[2]), wpid)
-		NetScript.M_SNAP:
-			if net_mode != 2:
-				return
-			_net_snap_apply(msg[1] as Array)
-		NetScript.M_SHOTS:
-			if net_mode != 2:
-				return
-			for e in msg[1] as Array:
-				_net_spawn_shot_client(e as Array)
-		NetScript.M_FX:
-			if net_mode != 2:
-				return
-			for e in msg[1] as Array:
-				_net_add_fx(e as Array)
-		NetScript.M_ECON:
-			if net_mode != 2 or int(msg[1]) != net_self_pid:
-				return
-			var xpg := int(msg[2])
-			if xpg > 0:
-				S.d["xp"] = int(S.d.get("xp", 0)) + xpg
-				_mission_bump("xp", xpg)
-			if int(msg[3]) != 0 and S.b("ranked_mode"):
-				S.d["rp"] = maxi(0, int(S.d.get("rp", 0)) + int(msg[3]))
-			S.d["bp"] = int(S.d.get("bp", 0)) + int(msg[4])
-			var kg := int(msg[5])
-			if kg > 0:
-				S.d["kills"] = int(S.d.get("kills", 0)) + kg
-				_mission_bump("kills", kg)
-				battle_kills += kg
-			battle_dmg += float(msg[6])
-			settings_dirty = true
-		NetScript.M_DIED:
-			if net_mode != 2 or int(msg[1]) != net_my_idx:
-				return
-			if state != State.DEAD:
-				_net_self_died(str(msg[2]), int(msg[4]), int(msg[5]), float(msg[6]), int(msg[7]))
-		NetScript.M_FEED:
-			if net_mode != 2:
-				return
-			ui.add_feed(str(msg[1]))
-		NetScript.M_PROMO:
-			if net_mode != 2 or int(msg[1]) != net_my_idx:
-				return
-			var nt := int(msg[2])
-			battle_promos += 1
-			_mission_bump("promo", 1)
-			if not promo_open and player.alive:
-				promo_open = true
-				ui.show_levelup(nt, D.of_tier(nt))
-				ui.toast("Promotion available - choose a ship!")
-				audio.play_ui("levelup")
-		NetScript.M_CRATES:
-			if net_mode != 2:
-				return
-			_net_crates_apply(msg[1] as Array)
-
-func _net_world_start(seedv: int, my_idx: int, self_pid: int) -> void:
-	if net_world_ready or net_started:
-		return
-	net_my_idx = my_idx
-	net_self_pid = self_pid
-	_build_static_world(seedv)
-	net_world_ready = true
-
-func _net_pick(s: Ship, sender: int, defid: String) -> void:
-	var def := D.by_id(defid)
-	if def.is_empty():
-		return
-	if s.promo_wait and int(def["tier"]) == s.tier + 1:
-		s.promo_wait = false
-		var ratio := maxf(s.hp / s.max_hp, 0.6)
-		_apply_def(s, def, ratio)
-		_add_fx(3, s.pos, s.hl * 1.8, 0.7, Color(0.5, 0.85, 1.0))
-	elif not s.alive:
-		_spawn(s, def)
-		s.nick = str(net_nicks.get(sender, s.nick))
-		s.color = net_col.get(sender, s.color)
-		s.name_label.text = s.nick
-		s.invuln = 3.0
-
-func _net_start_battle() -> void:
-	if state != State.MENU:
-		return
-	net_started = true
-	state = State.PLAYING
-	death_pending = false
-	promo_open = false
-	in_battle = true
-	fire_lock = 0.4
-	battle_xp0 = int(S.d.get("xp", 0))
-	battle_rp0 = int(S.d.get("rp", 0))
-	battle_bp0 = int(S.d.get("bp", 0))
-	battle_kills = 0
-	battle_dmg = 0.0
-	battle_time = 0.0
-	battle_promos = 0
-	_ensure_missions()
-	S.d["battles"] = int(S.d.get("battles", 0)) + 1
-	if not player.def.is_empty():
-		S.mark_played(str(player.def["id"]))
-	settings_dirty = true
-	cam.position = player.pos
-	ui.show_game()
-	_refresh_loadout()
-	audio.play_ui("click")
-	ui.toast("Joined the battle!")
-
-func _net_self_died(kname: String, from_t: int, to_t: int, prog: float, rpen: int) -> void:
-	if state == State.DEAD:
-		return
-	state = State.DEAD
-	shake = maxf(shake, 14.0 * S.f("shake"))
-	ctrl_air = false
-	promo_open = false
-	ui.hide_levelup()
-	audio.set_engine(false, 0.0)
-	audio.set_rotor(false, 0.0)
-	if S.b("ranked_mode") and rpen != 0:
-		S.d["rp"] = maxi(0, int(S.d.get("rp", 0)) + rpen)
-		settings_dirty = true
-	for a0 in [player.air, player.air2]:
-		if a0 != null and a0.node != null:
-			a0.node.visible = false
-			a0.shadow.visible = false
-	for a1 in player.wing:
-		if a1.node != null:
-			a1.node.visible = false
-	death_info = {"killer": kname, "score": int(player.score), "kills": int(player.kills),
-		"ship": str(player.def.get("name", "?")), "from": from_t, "to": to_t, "progress": prog,
-		"xp": int(S.d.get("xp", 0)), "rp": int(S.d.get("rp", 0))}
-	death_pending = true
-	death_timer = 1.5
-
-func _net_drop(pid: int) -> void:
-	var s: Ship = net_ships.get(pid)
-	net_ships.erase(pid)
-	net_in.erase(pid)
-	net_pend.erase(pid)
-	net_lastseen.erase(pid)
-	net_col.erase(pid)
-	net_nicks.erase(pid)
-	if s != null:
-		s.net_hw = -1
-		if s.alive:
-			_kill(s, null)
-		else:
-			ships.erase(s)
-			if s.node != null:
-				s.node.queue_free()
-
-func _net_host_apply(dt: float) -> void:
-	for cid in net_in.keys():
-		if not net_ships.has(cid):
-			continue
-		var s: Ship = net_ships[cid]
-		if s == null or not s.alive:
-			continue
-		var inp: Array = net_in[cid]
-		if inp.size() < 9:
-			continue
-		if bool(inp[1]):
-			s.throttle = minf(1.0, s.throttle + dt * 0.8)
-		if bool(inp[2]):
-			s.throttle = maxf(-0.3, s.throttle - dt * 0.8)
-		var steer := 0.0
-		if bool(inp[3]):
-			steer -= 1.0
-		if bool(inp[4]):
-			steer += 1.0
-		var turn := float(s.def["turn"])
-		s.angle += steer * turn * dt * clampf(absf(s.speed) / 60.0, 0.25, 1.0)
-		s.cursor = inp[5]
-		s.wsel = clampi(int(inp[8]), 0, maxi(0, s.weapons.size() - 1))
-		for w in s.weapons:
-			w.aimpt = s.cursor
-		if bool(inp[6]):
-			if s.wsel < s.weapons.size():
-				_try_fire(s, s.weapons[s.wsel])
-
-func _net_host_frame(dt: float) -> void:
-	if net_peer == null:
-		return
-	var gone: Array = []
-	for pid in net_lastseen.keys():
-		if time - float(net_lastseen[pid]) > 12.0:
-			gone.append(pid)
-	for pid in gone:
-		_net_drop(pid)
-	if net_ships.is_empty() and net_pend.is_empty():
-		return
-	net_snap_acc += dt
-	if net_snap_acc < 0.066:
-		return
-	net_snap_acc = 0.0
-	_net_flush_pends()
-	_net_send_snap()
-	if not net_ev_shots.is_empty():
-		_net_bcast([NetScript.M_SHOTS, net_ev_shots])
-		net_ev_shots.clear()
-	if not net_ev_fx.is_empty():
-		_net_bcast([NetScript.M_FX, net_ev_fx])
-		net_ev_fx.clear()
-	net_crates_acc += dt
-	if net_crates_acc >= 1.0:
-		net_crates_acc = 0.0
-		var list: Array = []
-		for c in crates:
-			list.append([c.pos, c.kind, c.phase])
-		_net_bcast([NetScript.M_CRATES, list])
-
-func _net_flush_pends() -> void:
-	for pid in net_pend.keys():
-		var pd: Array = net_pend[pid]
-		if float(pd[0]) == 0.0 and float(pd[1]) == 0.0 and float(pd[2]) == 0.0 and float(pd[3]) == 0.0 and float(pd[4]) <= 0.0:
-			continue
-		_net_send_to(pid, [NetScript.M_ECON, pid, int(float(pd[0])), int(float(pd[1])), int(float(pd[2])), int(float(pd[3])), float(pd[4])])
-		net_pend[pid] = [0.0, 0.0, 0.0, 0.0, 0.0]
-
-func _net_air_entry(to: Array, a) -> void:
-	if a == null or not a.alive:
-		to.append(["", Vector2.ZERO, 0.0, 0])
-	else:
-		to.append([str(a.id), a.pos, a.angle, 1])
-
-func _net_send_snap() -> void:
-	var arr: Array = []
-	for ci in ships.size():
-		var s: Ship = ships[ci]
-		if s.def.is_empty():
-			continue
-		var e: Array = [ci, str(s.def["id"]), s.pos, s.angle, s.speed, s.hp, s.max_hp,
-			1 if s.alive else 0, s.throttle, s.sink_t, s.tier, s.nick, s.color, s.score, s.kills,
-			1 if s.dive_t > 0.0 else 0, 1 if s.fire_t > 0.0 else 0, 1 if s.flood_t > 0.0 else 0, s.cursor]
-		var g1: Array = []
-		_net_air_entry(g1, s.air)
-		for a in s.wing:
-			_net_air_entry(g1, a)
-		var g2: Array = []
-		_net_air_entry(g2, s.air2)
-		for a in s.wing2:
-			_net_air_entry(g2, a)
-		e.append([g1, g2])
-		e.append(s.border_t)
-		arr.append(e)
-	if arr.is_empty():
-		return
-	_net_bcast([NetScript.M_SNAP, arr])
-
-func _net_client_input(dt: float) -> void:
-	var p := player
-	if not p.alive:
-		return
-	fire_lock = maxf(0.0, fire_lock - dt)
-	if ui.settings_open or state != State.PLAYING:
-		return
-	var mouse := get_global_mouse_position()
-	p.cursor = mouse
-	if not ctrl_air:
-		if _k_up():
-			p.throttle = minf(1.0, p.throttle + dt * 0.8)
-		if _k_down():
-			p.throttle = maxf(-0.3, p.throttle - dt * 0.8)
-		var steer := 0.0
-		if _k_left():
-			steer -= 1.0
-		if _k_right():
-			steer += 1.0
-		var turn := float(p.def["turn"])
-		p.angle += steer * turn * dt * clampf(absf(p.speed) / 60.0, 0.25, 1.0)
-		for w in p.weapons:
-			w.aimpt = mouse
-	else:
-		if p.air != null:
-			p.air.aimpt = mouse
-	_tick_weapons(p, dt)
-	net_snap_acc += dt
-	if net_snap_acc < 0.033:
-		return
-	net_snap_acc = 0.0
-	var firing := fire_lock <= 0.0 and ((fire_held and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)) or (fire2_held and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)) or S.down("fire"))
-	_net_put([NetScript.M_INPUT, _k_up(), _k_down(), _k_left(), _k_right(), mouse, firing, ctrl_air, p.wsel])
-
-func _net_snap_apply(arr: Array) -> void:
-	if net_mode != 2:
-		return
-	var me_created := false
-	for e in arr:
-		if e.size() < 21:
-			continue
-		var idx := int(e[0])
-		var did := str(e[1])
-		var def := D.by_id(did)
-		if def.is_empty():
-			continue
-		var s: Ship = null
-		if idx == net_my_idx:
-			s = player
-		elif net_by_idx.has(idx):
-			s = net_by_idx[idx]
-		else:
-			s = Ship.new()
-			ships.append(s)
-			net_by_idx[idx] = s
-			s.net_hw = 1
-		var fresh := false
-		if s.def.is_empty() or str(s.def.get("id", "")) != did:
-			_spawn(s, def)
-			fresh = true
-		var alv := int(e[7]) == 1
-		if not s.alive and alv and s != player:
-			_spawn(s, def)
-			fresh = true
-		s.alive = alv
-		if s != player:
-			s.net_hw = 1
-			s.nick = str(e[11])
-			s.color = e[12]
-			if s.name_label != null:
-				s.name_label.text = s.nick
-		s.net_tpos = e[2]
-		s.net_tang = float(e[3])
-		s.speed = float(e[4])
-		var hp0 := s.hp
-		s.hp = float(e[5])
-		s.max_hp = float(e[6])
-		s.throttle = float(e[8])
-		s.sink_t = float(e[9])
-		s.tier = int(e[10])
-		s.score = float(e[13])
-		s.kills = int(e[14])
-		s.dive_t = 1.0 if int(e[15]) == 1 else 0.0
-		s.fire_t = 0.1 if int(e[16]) == 1 else 0.0
-		s.flood_t = 0.1 if int(e[17]) == 1 else 0.0
-		s.cursor = e[18]
-		s.border_t = float(e[20])
-		if fresh:
-			s.net_init = false
-			_net_air_group(s, e[19] as Array, false)
-			_net_air_group(s, e[19] as Array, true)
-		if not s.alive and not alv:
-			_net_air_group(s, e[19] as Array, false)
-			_net_air_group(s, e[19] as Array, true)
-		elif (s.air != null or not s.wing.is_empty() or s.air2 != null or not s.wing2.is_empty()):
-			_net_air_group(s, e[19] as Array, false)
-			_net_air_group(s, e[19] as Array, true)
-		if s == player:
-			if hp0 > 0.0 and s.hp < hp0 and s.alive:
-				var dd := hp0 - s.hp
-				shake = maxf(shake, minf(dd * 0.15 + 3.0, 12.0) * S.f("shake"))
-				ui.hit_flash(minf(0.55, dd / maxf(s.max_hp, 1.0) * 2.2))
-				if s.hp > 0.0 and s.hp < s.max_hp * 0.25:
-					audio.play_ui("alarm", -8.0)
-			if not s.alive and state == State.PLAYING:
-				_net_self_died("the sea", s.tier, s.tier, D.tier_progress(s.score, s.tier), 0)
-		if net_world_ready and not net_started and state == State.MENU and idx == net_my_idx:
-			_net_start_battle()
-			me_created = true
-	if net_world_ready and not net_started and net_my_idx >= 0 and state == State.MENU:
-		_net_start_battle()
-
-func _net_air_group(s: Ship, groups: Array, second: bool) -> void:
-	if groups.size() < 2:
-		return
-	var list: Array = groups[1] as Array if second else groups[0] as Array
-	var chain: Array = []
-	if second:
-		if s.air2 != null:
-			chain.append(s.air2)
-		for a in s.wing2:
-			chain.append(a)
-	else:
-		if s.air != null:
-			chain.append(s.air)
-		for a in s.wing:
-			chain.append(a)
-	for i in list.size():
-		if i >= chain.size():
-			return
-		var e: Array = list[i] as Array
-		var a: Air = chain[i]
-		var aid := str(e[0])
-		if aid == "" or not D.AIR.has(aid):
-			a.alive = false
-			if a.node != null:
-				a.node.visible = false
-			if a.shadow != null:
-				a.shadow.visible = false
-			continue
-		if str(a.id) != aid:
-			a.id = aid
-			a.d = D.AIR[aid]
-		a.alive = int(e[3]) == 1
-		a.pos = e[1]
-		a.angle = float(e[2])
-
-func _net_mirror_step(s: Ship, dt: float) -> void:
-	if not s.alive:
-		return
-	var k := 1.0 - exp(-14.0 * dt)
-	if not s.net_init:
-		s.net_init = true
-		s.pos = s.net_tpos
-		s.angle = s.net_tang
-	elif s.pos.distance_to(s.net_tpos) > 900.0:
-		s.pos = s.net_tpos
-		s.angle = s.net_tang
-	else:
-		s.pos = s.pos.lerp(s.net_tpos, k)
-		s.angle += angle_difference(s.angle, s.net_tang) * k
-	for w in s.weapons:
-		w.aimpt = s.cursor
-	_tick_weapons(s, dt)
-	_update_mounts(s, dt)
-	var show := s.is_player or s.seen or not S.b("fog")
-	_net_air_visual(s.air, show, dt)
-	for a in s.wing:
-		_net_air_visual(a, show, dt)
-	_net_air_visual(s.air2, show, dt)
-	for a in s.wing2:
-		_net_air_visual(a, show, dt)
-
-func _net_air_visual(a, show: bool, dt: float) -> void:
-	if a == null or a.node == null or a.shadow == null:
-		return
-	a.node.visible = show and a.alive
-	a.shadow.visible = show and a.alive
-	if not a.alive:
-		return
-	a.node.position = a.pos
-	a.node.rotation = a.angle
-	a.shadow.position = a.pos + Vector2(9.0, 14.0)
-	a.shadow.rotation = a.angle
-	if a.rotor != null:
-		a.rotor.rotation += dt * (35.0 if str(a.d["kind"]) == "heli" else 70.0)
-
-func _net_step_shots(dt: float) -> void:
-	var i := shots.size() - 1
-	while i >= 0:
-		var sh: Shot = shots[i]
-		var remove := false
-		if sh.dead:
-			remove = true
-		else:
-			sh.t += dt
-			sh.life -= dt
-			_move_shot(sh, dt)
-			if sh.life <= 0.0:
-				remove = true
-		if remove:
-			shots.remove_at(i)
-		i -= 1
-
-func _net_spawn_shot_client(e: Array) -> void:
-	if e.size() < 6:
-		return
-	var wid := str(e[0])
-	if not D.WEAPONS.has(wid):
-		return
-	var wd: Dictionary = D.WEAPONS[wid]
-	if not wd.has("pk"):
-		return
-	var src: Ship = null
-	if net_by_idx.has(int(e[5])):
-		src = net_by_idx[int(e[5])]
-	var sh := Shot.new()
-	sh.src = src if src != null else player
-	sh.kind = int(D.KIND[str(wd["pk"])])
-	sh.ang = float(e[2])
-	sh.vel = e[3]
-	sh.spd = sh.vel.length()
-	sh.pos = e[1]
-	sh.dmg = float(wd["dmg"])
-	sh.spl = float(wd.get("spl", 0.0))
-	sh.mode = int(wd.get("mode", 0))
-	sh.turn = float(wd.get("turn", 0.0))
-	sh.seek = float(wd.get("seek", 0.0))
-	sh.aa = bool(wd.get("aa", false))
-	sh.ar = float(wd.get("ar", 0.0))
-	sh.mt = int(wd.get("mt", 0))
-	sh.tgt = e[4]
-	sh.scan = 0.3
-	sh.life = float(wd["rng"]) / maxf(sh.spd, 1.0)
-	if sh.kind == K_SHELL:
-		sh.sz = 1.6 + float(wd.get("bw", 2.0)) * 0.45
-		sh.col = Color(1.0, 0.85, 0.45)
-	elif sh.kind == K_ROCKET:
-		sh.hp = 4.0
-	elif sh.kind == K_MISSILE:
-		sh.life *= 1.25
-		sh.hp = 12.0
-	elif sh.kind == K_BOMB:
-		sh.life = 0.7
-		sh.hp = 10.0
-	shots.append(sh)
-	if sh.pos.distance_squared_to(cam.position) < 2600.0 * 2600.0:
-		audio.play(str(wd["snd"]), sh.pos, -4.0)
-
-func _net_add_fx(e: Array) -> void:
-	if e.size() < 6:
-		return
-	var f := Fx.new()
-	f.kind = int(e[0])
-	f.pos = e[1]
-	f.size = float(e[2])
-	f.dur = float(e[3])
-	f.col = e[4]
-	f.ang = float(e[5])
-	f.sd = rng.randf() * TAU
-	fxs.append(f)
-	if f.kind == 0 and f.size > 55.0:
-		audio.play("explode_l", f.pos, -4.0)
-	elif f.kind == 0:
-		audio.play("explode_s", f.pos, -8.0)
-	elif f.kind == 8 and f.size > 60.0:
-		audio.play("sink", f.pos, -6.0)
-
-func _net_crates_apply(list: Array) -> void:
-	crate_grid.clear()
-	crates.clear()
-	for e in list:
-		if e.size() < 3:
-			continue
-		var c := Crate.new()
-		c.pos = e[0]
-		c.kind = int(e[1])
-		c.phase = float(e[2])
-		c.cell = _cell(c.pos)
-		_cgrid_add(c)
-		crates.append(c)
-
-func _net_bcast(msg: Array) -> void:
-	_net_put(msg)
-
-func _net_beacon(dt: float) -> void:
-	if net_beacon == null or net_mode != 1:
-		return
-	net_beacon_acc += dt
-	if net_beacon_acc < 0.8:
-		return
-	net_beacon_acc = 0.0
-	var nick := str(S.d.get("nick", "Battle"))
-	if not D.nick_ok(nick):
-		nick = "Battle"
-	var npl := net_ships.size() + 1
-	net_beacon.set_dest_address("255.255.255.255", NetScript.DIS_PORT)
-	net_beacon.put_var([NetScript.DIS_TAG, "%s's battle (%d)" % [nick, npl], npl])
-	net_beacon.set_dest_address("127.0.0.1", NetScript.DIS_PORT)
-	net_beacon.put_var([NetScript.DIS_TAG, "%s's battle (%d)" % [nick, npl], npl])
-
-func _net_match_listen(_dt: float) -> void:
-	if net_mode != 0 or ui == null or ui.join_root == null or not ui.join_root.visible:
-		if net_listen != null:
-			net_listen.close()
-			net_listen = null
-		return
-	if net_listen == null:
-		net_listen = PacketPeerUDP.new()
-		if net_listen.bind(NetScript.DIS_PORT) != OK:
-			net_listen.close()
-			net_listen = null
-			return
-	while net_listen.get_available_packet_count() > 0:
-		var v: Variant = net_listen.get_var()
-		var ip := net_listen.get_packet_ip()
-		if v is Array and (v as Array).size() >= 3 and str((v as Array)[0]) == NetScript.DIS_TAG:
-			net_matches[ip] = [str((v as Array)[1]), int((v as Array)[2]), time]
-	var stale: Array = []
-	for ip in net_matches.keys():
-		if time - float(net_matches[ip][2]) > 3.5:
-			stale.append(ip)
-	for ip in stale:
-		net_matches.erase(ip)
-	var list: Array = []
-	for ip in net_matches.keys():
-		list.append([ip, str(net_matches[ip][0]), int(net_matches[ip][1])])
-	ui.set_matches(list)

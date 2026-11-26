@@ -8,10 +8,6 @@ signal ship_picked(ship_id: String, mode: String)
 signal slot_clicked(idx: int)
 signal ability_clicked(idx: int)
 signal setting_changed(key: String)
-signal exit_requested
-signal host_requested
-signal join_requested(ip: String)
-signal match_picked(ip: String)
 
 const D := preload("res://data.gd")
 const SettingsScript := preload("res://settings.gd")
@@ -46,15 +42,6 @@ var settings_root: Control
 var name_edit: LineEdit
 var play_btn: Button
 var loading := 0.0
-var join_root: Control
-var join_ip_edit: LineEdit
-var join_err: Label
-var match_list: VBoxContainer
-var match_msg: Label
-var match_rows: Array = []
-var host_addr_lbl: Label
-var leave_btn: Button
-var login_nick: LineEdit
 
 var lbl_class: Label
 var lbl_level: Label
@@ -107,6 +94,8 @@ var rank_lbl: Label
 var meta_bar: ProgressBar
 var ranked_btn: Button
 var tier_row: HBoxContainer
+var fleet_root: Control
+var controls_root: Control
 var fleet_grid: GridContainer
 var flash_rect: ColorRect
 var lowhp_rect: ColorRect
@@ -119,46 +108,19 @@ var rebind_action := ""
 var rebind_btn: Button
 var key_btns: Dictionary = {}
 var last_board_sig := ""
-var game = null
-var in_battle := false
-var guest_mode := false
-var page := "home"
-var pages: Dictionary = {}
-var nav_btns: Dictionary = {}
-var page_box: Control
-var login_root: Control
-var login_pin: LineEdit
-var login_err: Label
-var results_root: Control
-var res_box: VBoxContainer
-var res_ri := 0
-var badge_ctl: Control
-var prof_ri := 0
-var prof_d: Dictionary = {}
-var paint_row: HBoxContainer
-var rank_box: VBoxContainer
-var mission_box: VBoxContainer
-var bp_grid: GridContainer
-var fleet_detail: VBoxContainer
-var fleet_did := ""
-var exit_btn: Button
 
 # ---------------- Setup ----------------
 
 func setup(settings: SettingsScript) -> void:
 	S = settings
 	layer = 10
-	var full := Control.new()
-	full.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	full.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(full)
-	full.resized.connect(_apply_ui_scale)
 	root = Control.new()
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var th := Theme.new()
 	th.default_font_size = 14
 	root.theme = th
-	full.add_child(root)
+	add_child(root)
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_hud()
 	_build_menu()
 	_build_levelup()
@@ -185,18 +147,6 @@ func setup(settings: SettingsScript) -> void:
 	root.add_child(lowhp_rect)
 	lowhp_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	warn_lbl.visible = false
-	_apply_ui_scale()
-
-func _apply_ui_scale() -> void:
-	if root == null or root.get_parent() == null:
-		return
-	var vs: Vector2 = root.get_parent().size
-	if vs.y <= 1.0:
-		return
-	var sc := clampf(S.f("ui_scale"), 0.6, 2.5) * clampf(vs.y / 720.0, 0.75, 2.2)
-	root.scale = Vector2(sc, sc)
-	root.size = vs / sc
-	root.position = Vector2.ZERO
 
 func _process(dt: float) -> void:
 	if feed.is_empty():
@@ -394,11 +344,6 @@ func _build_hud() -> void:
 	root.add_child(hud_root)
 	hud_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-	leave_btn = _make_button(hud_root, "LEAVE BATTLE", 13, Vector2(150, 32), Color(0.62, 0.28, 0.18))
-	_rect(leave_btn, 0.5, 0, 0.5, 0, -78, 10, 78, 42)
-	leave_btn.visible = false
-	leave_btn.pressed.connect(_exit_battle)
 
 	# --- status panel (top-left)
 	var st := _panel(hud_root)
@@ -951,213 +896,67 @@ func hide_respawn() -> void:
 
 # ---------------- Main menu ----------------
 
-# ---------------- Main menu: multi-page command port ----------------
-
 func _build_menu() -> void:
 	menu_root = Control.new()
 	root.add_child(menu_root)
 	menu_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	menu_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var dim := ColorRect.new()
-	dim.color = Color(0.0, 0.04, 0.10, 0.72)
+	dim.color = Color(0.0, 0.04, 0.10, 0.55)
 	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	menu_root.add_child(dim)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	# sea gradient bands so the menu reads as the ocean horizon, not a dialog box
 	var band := ColorRect.new()
-	band.color = Color(0.02, 0.10, 0.18, 0.4)
+	band.color = Color(0.02, 0.10, 0.18, 0.55)
 	band.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	menu_root.add_child(band)
-	band.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	band.anchor_left = 0.0
+	band.anchor_right = 1.0
+	band.anchor_top = 0.62
+	band.anchor_bottom = 1.0
 
-	# top bar: emblem + wordmark on the left, page navigation on the right
-	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", 16)
-	menu_root.add_child(top)
-	_rect(top, 0, 0, 1, 0, 46, 18, -46, 88)
-	var emblem := Control.new()
-	emblem.custom_minimum_size = Vector2(72, 72)
-	emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	emblem.draw.connect(_draw_logo.bind(emblem, 1.0))
-	top.add_child(emblem)
-	var title_box := VBoxContainer.new()
-	title_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top.add_child(title_box)
-	var word := HBoxContainer.new()
-	word.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	title_box.add_child(word)
-	var wa := _label(word, GAME_TITLE_A, 32, Color.WHITE)
-	var wb := _label(word, GAME_TITLE_B, 32, Color(0.86, 0.69, 0.22))
-	for t in [wa, wb]:
-		t.add_theme_constant_override("outline_size", 6)
+	# title block, full width across the top of the screen
+	var tcol := VBoxContainer.new()
+	tcol.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	menu_root.add_child(tcol)
+	_rect(tcol, 0, 0, 0, 0, 0, 26, 0, 0)
+	var title := HBoxContainer.new()
+	title.alignment = BoxContainer.ALIGNMENT_CENTER
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tcol.add_child(title)
+	var ta := _label(title, GAME_TITLE_A, 84, Color.WHITE)
+	var tb := _label(title, GAME_TITLE_B, 84, ACCENT_HI)
+	for t in [ta, tb]:
+		t.add_theme_constant_override("outline_size", 12)
 		t.add_theme_color_override("font_outline_color", Color(0, 0.05, 0.15, 0.7))
 		t.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var sub := _label(title_box, TAGLINE, 12, TEXT_DIM)
+	var sub := _label(tcol, TAGLINE, 18, TEXT)
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top.add_child(spacer)
-	for pg in [["home", "PORT"], ["profile", "PROFILE"], ["fleet", "FLEET"], ["progress", "BATTLE PASS"], ["configs", "SETTINGS"]]:
-		var nb := _make_button(top, pg[1], 15, Vector2(150, 46), Color(0.14, 0.22, 0.34))
-		nb.pressed.connect(_goto.bind(pg[0]))
-		nav_btns[pg[0]] = nb
 
-	page_box = Control.new()
-	page_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	menu_root.add_child(page_box)
-	_rect(page_box, 0, 0, 1, 1, 46, 106, -46, -66)
+	# left command column: the actual menu, full-screen sized controls
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 12)
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	menu_root.add_child(col)
+	_rect(col, 0, 0, 0, 0, 60, 190, 0, 0)
+	col.custom_minimum_size = Vector2(430, 0)
 
-	pages["home"] = _page_home()
-	pages["profile"] = _page_profile()
-	pages["fleet"] = _page_fleet()
-	pages["progress"] = _page_progress()
-	pages["configs"] = _page_configs()
-
-	var hint := _label(menu_root, "W/S throttle    A/D steer    Mouse: aim    Click/Space: fire    1-9: weapons    Q/E/R: abilities    V: aircraft    Esc: settings", 13, TEXT_DIM)
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_rect(hint, 0.5, 1, 0.5, 1, -430, -32, 430, -10)
-
-	_build_login()
-	_build_join()
-	_build_results()
-	_goto("home", true)
-
-func _goto(pg: String, silent: bool = false) -> void:
-	page = pg
-	for k in pages.keys():
-		pages[k].visible = k == pg
-	for k in nav_btns.keys():
-		nav_btns[k].modulate = Color(1.0, 0.85, 0.4) if k == pg else Color(1, 1, 1, 0.85)
-	match pg:
-		"home":
-			_refresh_menu_meta()
-		"profile":
-			_fill_profile()
-		"fleet":
-			_fill_menu_cards(menu_tier)
-		"progress":
-			_fill_progress()
-		"configs":
-			_sync_settings()
-	if not silent:
-		audio_click()
-
-# ---------------- HOME ----------------
-
-func _page_home() -> Control:
-	var pg := Control.new()
-	pg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	page_box.add_child(pg)
-	_rect(pg, 0, 0, 0, 0, 0, 0, 0, 0)
-	var cc := CenterContainer.new()
-	cc.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	pg.add_child(cc)
-	_rect(cc, 0, 0, 0, 0, 0, 0, 0, 0)
-	var card := _panel(cc, Color(0.03, 0.09, 0.16, 0.92), 30.0, 16)
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 14)
-	card.add_child(v)
-	var big_logo := Control.new()
-	big_logo.custom_minimum_size = Vector2(300, 140)
-	big_logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	big_logo.draw.connect(_draw_big_logo.bind(big_logo))
-	v.add_child(big_logo)
-	var t := _label(v, "TOTAL WAR ON THE HIGH SEAS", 20, Color(0.86, 0.69, 0.22))
-	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var note := _label(v, "Every battle starts at Tier I. Sink ships, collect supplies, promote in battle through ten tiers.", 14, TEXT_DIM)
-	note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.custom_minimum_size = Vector2(560, 0)
-	play_btn = _make_button(v, "Loading world...  0%", 28, Vector2(620, 74))
-	play_btn.disabled = true
-	play_btn.pressed.connect(_on_play_clicked)
-	ranked_btn = _make_button(v, "RANKED: OFF", 16, Vector2(620, 46), Color(0.3, 0.34, 0.4))
-	ranked_btn.pressed.connect(_toggle_ranked)
-	var net_row := HBoxContainer.new()
-	net_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	net_row.add_theme_constant_override("separation", 10)
-	v.add_child(net_row)
-	var host_btn := _make_button(net_row, "HOST ONLINE MATCH", 16, Vector2(300, 42), Color(0.16, 0.40, 0.30))
-	host_btn.pressed.connect(func():
-		audio_click()
-		host_requested.emit())
-	var join_btn := _make_button(net_row, "JOIN MATCH", 16, Vector2(300, 42), Color(0.45, 0.33, 0.12))
-	join_btn.pressed.connect(func():
-		audio_click()
-		_open_join())
-	var addr_row := HBoxContainer.new()
-	addr_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	addr_row.add_theme_constant_override("separation", 8)
-	v.add_child(addr_row)
-	host_addr_lbl = _label(addr_row, "", 13, Color(0.6, 1.0, 0.85))
-	var copyb := _make_button(addr_row, "COPY", 12, Vector2(70, 30), Color(0.2, 0.3, 0.45))
-	copyb.pressed.connect(func():
-		audio_click()
-		DisplayServer.clipboard_set(host_addr_lbl.text)
-		toast("Address copied - send it to your friend"))
-	profile_lbl = _label(v, "", 14, TEXT)
-	profile_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	rank_lbl = _label(v, "", 15, WARN)
-	rank_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	meta_bar = _bar(v, 8.0, ACCENT_HI)
-	return pg
-
-# ---------------- PROFILE ----------------
-
-func _page_profile() -> Control:
-	var pg := Control.new()
-	pg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	page_box.add_child(pg)
-	_rect(pg, 0, 0, 0, 0, 0, 0, 0, 0)
-	var sc := ScrollContainer.new()
-	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	pg.add_child(sc)
-	_rect(sc, 0, 0, 0, 0, 0, 0, 0, 0)
-	var cc := CenterContainer.new()
-	sc.add_child(cc)
-	cc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var card := _panel(cc, PANEL_BG, 26.0, 14)
-	card.custom_minimum_size = Vector2(880, 0)
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 14)
-	card.add_child(v)
-	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", 24)
-	v.add_child(top)
-	var left := VBoxContainer.new()
-	left.add_theme_constant_override("separation", 8)
-	top.add_child(left)
-	var t1 := _label(left, "RANK INSIGNIA", 16, Color(0.86, 0.69, 0.22))
-	t1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	badge_ctl = Control.new()
-	badge_ctl.custom_minimum_size = Vector2(170, 170)
-	badge_ctl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	badge_ctl.draw.connect(_draw_profile_badge.bind(badge_ctl))
-	badge_ctl.pivot_offset = Vector2(85, 85)
-	left.add_child(badge_ctl)
-	var rank_big := _label(left, "", 18, WARN)
-	rank_big.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	prof_d["rank_big"] = rank_big
-	var rp_lbl := _label(left, "", 13, TEXT_DIM)
-	rp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	prof_d["rp_lbl"] = rp_lbl
-	var season_lbl := _label(left, "", 12, Color(0.6, 1.0, 0.85))
-	season_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	prof_d["season_lbl"] = season_lbl
-	var right := VBoxContainer.new()
-	right.add_theme_constant_override("separation", 10)
-	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(right)
-	var t2 := _label(right, "CAPTAIN'S LOG", 16, ACCENT_HI)
-	var nrow := HBoxContainer.new()
-	nrow.add_theme_constant_override("separation", 10)
-	right.add_child(nrow)
+	# profile card pinned top right
+	var prof := _panel(menu_root, PANEL_BG, 14.0, 12)
+	_rect(prof, 1, 0, 1, 0, -340, 26, -40, 0)
+	var pv := VBoxContainer.new()
+	pv.add_theme_constant_override("separation", 8)
+	prof.add_child(pv)
+	var pn := _label(pv, "CAPTAIN'S LOG", 15, ACCENT_HI)
+	pn.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_edit = LineEdit.new()
 	name_edit.placeholder_text = "Nickname"
 	name_edit.max_length = 14
 	name_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_edit.custom_minimum_size = Vector2(240, 40)
+	name_edit.custom_minimum_size = Vector2(0, 40)
 	name_edit.add_theme_font_size_override("font_size", 18)
 	var ne := StyleBoxFlat.new()
 	ne.bg_color = Color(0, 0, 0, 0.35)
@@ -1172,788 +971,131 @@ func _page_profile() -> Control:
 	name_edit.add_theme_stylebox_override("focus", nf)
 	name_edit.add_theme_color_override("font_color", Color.WHITE)
 	name_edit.add_theme_color_override("font_placeholder_color", Color(1, 1, 1, 0.4))
-	nrow.add_child(name_edit)
-	name_edit.text_submitted.connect(func(_t: String): _apply_nick())
-	var applyb := _make_button(nrow, "APPLY", 14, Vector2(100, 40), Color(0.16, 0.36, 0.5))
-	applyb.pressed.connect(_apply_nick)
-	var msg := _label(right, "", 12, Color(1.0, 0.5, 0.45))
-	prof_d["msg"] = msg
-	var lvl_lbl := _label(right, "", 14, TEXT)
-	prof_d["lvl_lbl"] = lvl_lbl
-	var xp_bar := _bar(right, 10.0, ACCENT_HI)
-	prof_d["xp_bar"] = xp_bar
-	meta_bar = xp_bar
-	var stat_lbl := _label(right, "", 13, TEXT_DIM)
-	stat_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	prof_d["stat_lbl"] = stat_lbl
-	var pt := _label(right, "HULL PAINT  (unlocked in the Battle Pass)", 13, Color(0.86, 0.69, 0.22))
-	paint_row = HBoxContainer.new()
-	paint_row.add_theme_constant_override("separation", 8)
-	right.add_child(paint_row)
-	var outrow := HBoxContainer.new()
-	outrow.add_theme_constant_override("separation", 10)
-	right.add_child(outrow)
-	var logout := _make_button(outrow, "LOG OUT", 14, Vector2(140, 38), Color(0.5, 0.25, 0.22))
-	logout.pressed.connect(_logout)
-	return pg
+	pv.add_child(name_edit)
+	name_edit.text_submitted.connect(func(_t: String): _on_play_clicked())
+	profile_lbl = _label(pv, "", 13, TEXT)
+	rank_lbl = _label(pv, "", 13, WARN)
+	meta_bar = _bar(pv, 8.0, ACCENT_HI)
+	ranked_btn = _make_button(pv, "RANKED: OFF", 14, Vector2(0, 34), Color(0.3, 0.34, 0.4))
+	ranked_btn.pressed.connect(_toggle_ranked)
+	profile_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	rank_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
-func _apply_nick() -> void:
-	var n := str(name_edit.text).strip_edges()
-	if n.is_empty():
-		return
-	if not _nick_strict(n):
-		if prof_d.has("msg"):
-			(prof_d["msg"] as Label).text = "That nickname is not allowed."
-		return
-	S.d["nick"] = n
-	S.save_file()
-	if prof_d.has("msg"):
-		(prof_d["msg"] as Label).text = "Nickname saved."
-	_fill_profile()
+	var back_note := _label(col, "Every battle starts at Tier I. Earn score to promote in battle.", 14, TEXT_DIM)
+	back_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	back_note.custom_minimum_size = Vector2(430, 0)
 
-func _logout() -> void:
-	S.logout()
-	guest_mode = false
-	_goto("home", true)
-	show_menu()
+	play_btn = _make_button(col, "Loading world...  0%", 26, Vector2(430, 64))
+	play_btn.disabled = true
+	play_btn.pressed.connect(_on_play_clicked)
+	var b_fleet := _make_button(col, "FLEET BROWSER", 20, Vector2(430, 52), Color(0.18, 0.30, 0.42))
+	b_fleet.pressed.connect(_open_fleet)
+	var b_set := _make_button(col, "SETTINGS", 20, Vector2(430, 52), Color(0.18, 0.30, 0.42))
+	b_set.pressed.connect(open_settings)
+	var b_ctrl := _make_button(col, "CONTROLS", 20, Vector2(430, 52), Color(0.18, 0.30, 0.42))
+	b_ctrl.pressed.connect(_open_controls)
 
-func _fill_profile() -> void:
-	if prof_d.is_empty():
-		return
-	var xp := int(S.d.get("xp", 0))
-	var meta := D.level_progress(xp)
-	var ri := D.rank_i_from_rp(int(S.d.get("rp", 0)))
-	prof_ri = ri
-	badge_ctl.queue_redraw()
-	(prof_d["rank_big"] as Label).text = str(D.RANKS[ri][1]).to_upper()
-	(prof_d["rp_lbl"] as Label).text = "%d Ranked Rating" % int(S.d.get("rp", 0))
-	(prof_d["season_lbl"] as Label).text = "Season %d ends in %d days" % [int(S.d.get("season", 1)), S.season_days_left()]
-	(prof_d["msg"] as Label).text = ""
-	name_edit.text = str(S.d.get("nick", "Captain"))
-	(prof_d["lvl_lbl"] as Label).text = "Level %d  -  %d / %d XP" % [int(meta["lvl"]), int(meta["have"]), int(meta["need"])]
-	(prof_d["xp_bar"] as ProgressBar).value = clampf(float(meta["have"]) / float(maxi(int(meta["need"]), 1)), 0.0, 1.0)
-	(prof_d["stat_lbl"] as Label).text = "Battles fought: %d      Ships sunk: %d      Best score: %d" % [int(S.d.get("battles", 0)), int(S.d.get("kills", 0)), int(S.d.get("best", 0))]
-	paint_unlocks()
+	# bottom hint line
+	var hint := _label(menu_root, "W/S throttle    A/D steer    Mouse: aim    Click/Space: fire    1-9: weapon    Q/E/R: abilities    V: aircraft", 14, TEXT_DIM)
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_rect(hint, 0.5, 1, 0.5, 1, -430, -34, 430, -12)
 
-func paint_unlocked(pk: String) -> bool:
-	if pk == "navy":
-		return true
-	var claimed := int(S.d.get("bp_claim", 0))
-	for i in D.BP_REWARDS.size():
-		var rw: Dictionary = D.BP_REWARDS[i]
-		if str(rw["k"]) == "paint" and str(rw["v"]) == pk:
-			return (claimed >> i) & 1 == 1
-	return false
+	_build_fleet()
+	_build_controls()
 
-func paint_unlocks() -> void:
-	if paint_row == null:
-		return
-	_clear(paint_row)
-	var cur := str(S.d.get("paint", "navy"))
-	for pk in D.PAINTS.keys():
-		var b := Button.new()
-		b.custom_minimum_size = Vector2(52, 52)
-		b.focus_mode = Control.FOCUS_NONE
-		var sb := StyleBoxFlat.new()
-		if paint_unlocked(str(pk)):
-			sb.bg_color = D.PAINTS[pk]["c"]
-			b.tooltip_text = str(D.PAINTS[pk]["n"])
-		else:
-			sb.bg_color = Color(0.1, 0.1, 0.12)
-			b.tooltip_text = "%s  (locked - Battle Pass)" % str(D.PAINTS[pk]["n"])
-		sb.set_corner_radius_all(10)
-		sb.border_color = Color(0.86, 0.69, 0.22) if pk == cur else Color(1, 1, 1, 0.18)
-		sb.set_border_width_all(3 if pk == cur else 1)
-		b.add_theme_stylebox_override("normal", sb)
-		b.pressed.connect(_pick_paint.bind(str(pk)))
-		paint_row.add_child(b)
-
-func _pick_paint(pk: String) -> void:
-	if not paint_unlocked(pk):
-		toast("Unlock that paint in the Battle Pass (Progress page).")
-		return
-	S.d["paint"] = pk
-	S.save_file()
+func _open_fleet() -> void:
 	audio_click()
-	paint_unlocks()
+	fleet_root.visible = true
+	_fill_menu_cards(menu_tier)
 
-# ---------------- FLEET BROWSER ----------------
+func _open_controls() -> void:
+	audio_click()
+	controls_root.visible = true
 
-func _page_fleet() -> Control:
-	var pg := Control.new()
-	pg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	page_box.add_child(pg)
-	_rect(pg, 0, 0, 0, 0, 0, 0, 0, 0)
+func _close_fleet() -> void:
+	audio_click()
+	fleet_root.visible = false
+
+func _close_controls() -> void:
+	audio_click()
+	controls_root.visible = false
+
+func _build_fleet() -> void:
+	fleet_root = Control.new()
+	root.add_child(fleet_root)
+	fleet_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	fleet_root.visible = false
+	var dim2 := ColorRect.new()
+	dim2.color = Color(0.0, 0.04, 0.10, 0.92)
+	fleet_root.add_child(dim2)
+	dim2.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
-	pg.add_child(v)
-	_rect(v, 0, 0, 0, 0, 0, 0, 0, 0)
+	fleet_root.add_child(v)
+	_rect(v, 0, 0, 0, 0, 40, 20, 40, 20)
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 16)
 	v.add_child(head)
-	var t := _label(head, "THE FLEET", 30, Color.WHITE)
-	t.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	var cls_lbl := _label(head, "Every class, every tier. Ships you have commanded are lit up; click any hull for its full profile.", 14, TEXT_DIM)
-	cls_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var ft := _label(head, "THE FLEET", 34, Color.WHITE)
+	ft.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	head.add_theme_constant_override("separation", 16)
 	var sp := Control.new()
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(sp)
-	var back := _make_button(head, "BACK TO PORT", 15, Vector2(170, 44), Color(0.3, 0.34, 0.4))
-	back.pressed.connect(_goto.bind("home"))
+	var cls_lbl := _label(head, "Browse every class. Stronger ships unlock as your level rises.", 14, TEXT_DIM)
+	cls_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var back := _make_button(head, "BACK", 17, Vector2(120, 44), Color(0.3, 0.34, 0.4))
+	back.pressed.connect(_close_fleet)
 	var tiers := HBoxContainer.new()
 	tiers.add_theme_constant_override("separation", 6)
 	tiers.alignment = BoxContainer.ALIGNMENT_CENTER
 	v.add_child(tiers)
-	_label(tiers, "TIER", 13, TEXT_DIM)
 	tier_row = HBoxContainer.new()
 	tier_row.add_theme_constant_override("separation", 6)
 	tier_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	tiers.add_child(tier_row)
-	for tt in D.MAX_TIER:
-		_make_button(tier_row, str(D.ROMAN[tt]), 17, Vector2(58, 40), Color(0.25, 0.29, 0.36)).pressed.connect(_sel_tier.bind(tt + 1))
-	var split := HBoxContainer.new()
-	split.add_theme_constant_override("separation", 14)
-	v.add_child(split)
+	v.add_child(tier_row)
+	for t in D.MAX_TIER:
+		_make_button(tier_row, str(D.ROMAN[t]), 17, Vector2(58, 40), Color(0.25, 0.29, 0.36)).pressed.connect(_sel_tier.bind(t + 1))
 	var sc := ScrollContainer.new()
 	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	sc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	split.add_child(sc)
+	v.add_child(sc)
 	fleet_grid = GridContainer.new()
 	fleet_grid.columns = 4
 	fleet_grid.add_theme_constant_override("h_separation", 12)
 	fleet_grid.add_theme_constant_override("v_separation", 12)
 	fleet_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sc.add_child(fleet_grid)
-	var det := _panel(split, Color(0.04, 0.10, 0.18, 0.95), 14.0, 12)
-	det.custom_minimum_size = Vector2(360, 0)
-	det.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	fleet_detail = VBoxContainer.new()
-	fleet_detail.add_theme_constant_override("separation", 8)
-	det.add_child(fleet_detail)
-	var dv := _label(fleet_detail, "Select a hull to open its full profile - every stat fits on this page, even for ships you have never played.", 12, TEXT_DIM)
-	dv.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	return pg
 
-func _fleet_pick(id: String) -> void:
-	fleet_did = id
-	var def := D.by_id(id)
-	if def.is_empty() or fleet_detail == null:
-		return
-	_clear(fleet_detail)
-	var lvl := D.level_from_xp(int(S.d.get("xp", 0)))
-	var locked := not D.unlocked(def, lvl)
-	var played := S.has_played(str(def["id"]))
-	var head := HBoxContainer.new()
-	head.add_theme_constant_override("separation", 12)
-	fleet_detail.add_child(head)
-	var ic := Control.new()
-	ic.custom_minimum_size = Vector2(96, 56)
-	ic.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ic.draw.connect(_draw_preview.bind(ic, def))
-	head.add_child(ic)
-	var hv := VBoxContainer.new()
-	hv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(hv)
-	_label(hv, str(def["name"]), 16, Color.WHITE)
-	_label(hv, "Tier %s  |  %s  |  %dm x %dm" % [str(D.ROMAN[int(def["tier"]) - 1]), str(def["cls"]), int(def["len"]), int(def["wid"])], 11, ACCENT_HI)
-	var status := "FLOWN BY YOU" if played else ("LOCKED - LEVEL %d" % int(def.get("lvl", 1)) if locked else "NEVER COMMANDED")
-	_label(fleet_detail, status, 12, GOOD if played else (BAD if locked else TEXT_DIM))
-	var dsc := _label(fleet_detail, str(def.get("desc", "")), 12, TEXT)
-	dsc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	dsc.custom_minimum_size = Vector2(320, 0)
-	fleet_detail.add_child(_label(fleet_detail, "HULL", 10, TEXT_DIM))
-	_stat_row(fleet_detail, "%d HP" % int(def["hp"]), clampf(float(def["hp"]) / 20000.0, 0.02, 1.0), GOOD)
-	fleet_detail.add_child(_label(fleet_detail, "TOP SPEED", 10, TEXT_DIM))
-	_stat_row(fleet_detail, "%d kn" % int(def["spd"]), clampf(float(def["spd"]) / 250.0, 0.02, 1.0), ACCENT)
-	fleet_detail.add_child(_label(fleet_detail, "FIREPOWER", 10, TEXT_DIM))
-	_stat_row(fleet_detail, "%d dps" % int(D.dps(def)), clampf(D.dps(def) / 2200.0, 0.02, 1.0), BAD)
-	fleet_detail.add_child(_label(fleet_detail, "SPOT RANGE", 10, TEXT_DIM))
-	_stat_row(fleet_detail, "%dm" % int(def["det"]), clampf(float(def["det"]) / 2300.0, 0.02, 1.0), WARN)
-	var fld := _label(fleet_detail, _weapon_lines(def, 10), 11, TEXT)
-	fld.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	fld.custom_minimum_size = Vector2(320, 0)
-	var abil: Array = []
-	for a in def["abil"]:
-		abil.append(str(D.ABILITIES[str(a)]["n"]))
-	var al := _label(fleet_detail, "Abilities: " + ", ".join(abil), 11, TEXT_DIM)
-	al.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	al.custom_minimum_size = Vector2(320, 0)
-	if str(def["air"]) != "":
-		var sqn := int(def.get("squad", 1))
-		var air2 := str(def.get("air2", ""))
-		var atxt := "Aircraft: %s (squad of %d)" % [str(D.AIR[str(def["air"])]["n"]), sqn]
-		if air2 != "":
-			atxt += "   +   %s wingmen" % str(D.AIR[air2]["n"])
-		var ail := _label(fleet_detail, atxt, 11, Color(0.6, 0.95, 1.0))
-		ail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		ail.custom_minimum_size = Vector2(320, 0)
-	if str(def["cls"]) == "Submarine":
-		var sl := _label(fleet_detail, "Emergency Dive: guns cannot touch you while dived - only torpedoes. Dive has no cooldown.", 11, Color(0.6, 1.0, 0.85))
-		sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		sl.custom_minimum_size = Vector2(320, 0)
-
-# ---------------- PROGRESS: ranks + battle pass + missions ----------------
-
-func _page_progress() -> Control:
-	var pg := Control.new()
-	pg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	page_box.add_child(pg)
-	_rect(pg, 0, 0, 0, 0, 0, 0, 0, 0)
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 10)
-	pg.add_child(v)
-	_rect(v, 0, 0, 0, 0, 0, 0, 0, 0)
-	var head := HBoxContainer.new()
-	v.add_child(head)
-	var t := _label(head, "BATTLE PASS  &  RANKED LADDER", 30, Color.WHITE)
-	t.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	var sp := Control.new()
-	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(sp)
-	var back := _make_button(head, "BACK TO PORT", 15, Vector2(170, 44), Color(0.3, 0.34, 0.4))
-	back.pressed.connect(_goto.bind("home"))
-	var split := HBoxContainer.new()
-	split.add_theme_constant_override("separation", 14)
-	v.add_child(split)
-	var lp := _panel(split, PANEL_BG, 14.0, 12)
-	lp.custom_minimum_size = Vector2(300, 0)
-	lp.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var lv := VBoxContainer.new()
-	lv.add_theme_constant_override("separation", 2)
-	lp.add_child(lv)
-	_label(lv, "RANKED LADDER", 16, Color(0.86, 0.69, 0.22))
-	rank_box = VBoxContainer.new()
-	rank_box.add_theme_constant_override("separation", 2)
-	lv.add_child(rank_box)
-	var rp := _panel(split, PANEL_BG, 14.0, 12)
-	rp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	rp.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var rv := VBoxContainer.new()
-	rv.add_theme_constant_override("separation", 10)
-	rp.add_child(rv)
-	_label(rv, "DAILY MISSIONS  (BP points on completion)", 16, ACCENT_HI)
-	mission_box = VBoxContainer.new()
-	mission_box.add_theme_constant_override("separation", 6)
-	rv.add_child(mission_box)
-	_label(rv, "BATTLE PASS SEASON  -  20 TIERS", 16, ACCENT_HI)
-	var bphint := _label(rv, "Play battles and complete missions to earn Battle Pass points. Rewards reset every 20 days with your rank.", 12, TEXT_DIM)
-	bphint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	var bpsc := ScrollContainer.new()
-	bpsc.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	bpsc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	rv.add_child(bpsc)
-	bp_grid = GridContainer.new()
-	bp_grid.columns = 5
-	bp_grid.add_theme_constant_override("h_separation", 10)
-	bp_grid.add_theme_constant_override("v_separation", 10)
-	bp_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bpsc.add_child(bp_grid)
-	return pg
-
-func _badge_node(parent: Node, ri: int, r: float) -> Control:
-	var badge := Control.new()
-	badge.custom_minimum_size = Vector2(r * 2.7, r * 2.3)
-	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	badge.draw.connect(_draw_rank_badge.bind(badge, ri, r))
-	parent.add_child(badge)
-	return badge
-
-func _fill_progress() -> void:
-	var my_ri := D.rank_i_from_rp(int(S.d.get("rp", 0)))
-	if rank_box != null:
-		_clear(rank_box)
-		for i in D.RANKS.size():
-			var row := HBoxContainer.new()
-			row.add_theme_constant_override("separation", 10)
-			rank_box.add_child(row)
-			_badge_node(row, i, 13.0)
-			var nm := _label(row, "%s" % str(D.RANKS[i][1]), 13, Color(1.0, 0.85, 0.4) if i == my_ri else TEXT)
-			nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			_label(row, "%d RP" % int(D.RANKS[i][0]), 11, TEXT_DIM)
-	if mission_box != null:
-		_clear(mission_box)
-		if game == null:
-			mission_box.add_child(_label(mission_box, "Missions unlock in battle.", 12, TEXT_DIM))
-		else:
-			for m in game.get_missions():
-				var row2 := HBoxContainer.new()
-				row2.add_theme_constant_override("separation", 10)
-				mission_box.add_child(row2)
-				var txt := "%s   (%d / %d)" % [str(m["n"]), int(m["have"]), int(m["need"])]
-				var ml := _label(row2, txt, 13, TEXT)
-				ml.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-				var cb := _make_button(row2, ("CLAIMED" if bool(m["claimed"]) else ("CLAIM +%d BP" % int(m["reward"]))), 12, Vector2(140, 30), Color(0.36, 0.25, 0.1))
-				var can := bool(m["done"]) and not bool(m["claimed"])
-				cb.disabled = not can
-				cb.modulate = Color(1, 1, 1, 1.0) if can else Color(1, 1, 1, 0.45)
-				cb.pressed.connect(_claim_mission.bind(int(m["slot_bit"]), int(m["reward"]), str(m["n"])))
-	if bp_grid != null:
-		_clear(bp_grid)
-		var bpn := int(S.d.get("bp", 0))
-		var claimed := int(S.d.get("bp_claim", 0))
-		for i in D.BP_REWARDS.size():
-			var cost := D.BP_TIER_COST * (i + 1)
-			var rw: Dictionary = D.BP_REWARDS[i]
-			var has := (claimed >> i) & 1 == 1
-			var reach := bpn >= cost
-			var card := _panel(bp_grid, Color(0.05, 0.12, 0.2, 0.95), 8.0, 8)
-			card.custom_minimum_size = Vector2(150, 0)
-			var cv := VBoxContainer.new()
-			card.add_child(cv)
-			_label(cv, "TIER %d" % (i + 1), 11, TEXT_DIM)
-			var rl := _label(cv, str(rw["n"]), 11, WARN)
-			rl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			rl.custom_minimum_size = Vector2(134, 0)
-			var btn := _make_button(cv, ("CLAIMED" if has else ("CLAIM  (%d BP)" % cost if reach else "%d / %d BP" % [bpn, cost])), 11, Vector2(0, 26), Color(0.36, 0.25, 0.1))
-			btn.disabled = has or not reach
-			btn.modulate = Color(1, 1, 1, 1.0) if (reach and not has) else Color(1, 1, 1, 0.5)
-			btn.pressed.connect(_claim_bp.bind(i, str(rw["n"])))
-
-func _claim_mission(slot_bit: int, reward: int, mname: String) -> void:
-	if game == null:
-		return
-	game.claim_mission(slot_bit, reward)
-	toast("Mission complete: %s  +%d BP" % [mname, reward])
-	_fill_progress()
-
-func _claim_bp(idx: int, rname: String) -> void:
-	var claimed := int(S.d.get("bp_claim", 0))
-	if (claimed >> idx) & 1 == 1:
-		return
-	var cost := D.BP_TIER_COST * (idx + 1)
-	var bpn := int(S.d.get("bp", 0))
-	if bpn < cost:
-		toast("Need %d Battle Pass points." % cost)
-		return
-	bpn -= cost
-	S.d["bp"] = bpn
-	S.d["bp_claim"] = claimed | (1 << idx)
-	var rw: Dictionary = D.BP_REWARDS[idx]
-	match str(rw["k"]):
-		"xp":
-			S.d["xp"] = int(S.d.get("xp", 0)) + int(rw["v"])
-		"rp":
-			S.d["rp"] = int(S.d.get("rp", 0)) + int(rw["v"])
-	S.save_file()
-	toast("Battle Pass: %s" % rname)
-	_fill_progress()
-	_fill_profile()
-
-# ---------------- rank badge / logo drawing ----------------
-
-func _draw_profile_badge(c: Control) -> void:
-	_draw_rank_badge(c, prof_ri, 55.0)
-
-func _rank_polygon(sh: int, r: float, ctr: Vector2) -> PackedVector2Array:
-	var pts := PackedVector2Array()
-	match sh:
-		1:
-			pts.append(ctr + Vector2(0, -r))
-			pts.append(ctr + Vector2(r * 0.85, -r * 0.55))
-			pts.append(ctr + Vector2(r * 0.72, r * 0.42))
-			pts.append(ctr + Vector2(0, r))
-			pts.append(ctr + Vector2(-r * 0.72, r * 0.42))
-			pts.append(ctr + Vector2(-r * 0.85, -r * 0.55))
-		2:
-			for i in 6:
-				pts.append(ctr + Vector2.from_angle(TAU * i / 6.0 - PI / 2.0) * r)
-		3:
-			for i in 10:
-				var rr := r if i % 2 == 0 else r * 0.45
-				pts.append(ctr + Vector2.from_angle(TAU * i / 10.0 - PI / 2.0) * rr)
-		4:
-			pts.append(ctr + Vector2(-r, r * 0.55))
-			pts.append(ctr + Vector2(-r, -r * 0.15))
-			pts.append(ctr + Vector2(-r * 0.5, r * 0.18))
-			pts.append(ctr + Vector2(0, -r))
-			pts.append(ctr + Vector2(r * 0.5, r * 0.18))
-			pts.append(ctr + Vector2(r, -r * 0.15))
-			pts.append(ctr + Vector2(r, r * 0.55))
-	return pts
-
-func _draw_rank_badge(c: Control, ri: int, r: float) -> void:
-	if ri < 0 or ri >= D.RANK_META.size():
-		return
-	var m: Dictionary = D.RANK_META[ri]
-	var col: Color = m["col"]
-	var dark := col.darkened(0.55)
-	var ctr := c.size * 0.5
-	if c.size.x < 2.0:
-		ctr = c.custom_minimum_size * 0.5
-	match int(m["sh"]):
-		0:
-			c.draw_arc(ctr, r * 0.95, 0, TAU, 32, col, r * 0.16, true)
-			c.draw_circle(ctr, r * 0.42, col)
-		5:
-			c.draw_circle(ctr, r, Color(0.03, 0.09, 0.05, 0.9))
-			c.draw_arc(ctr, r, 0, TAU, 40, dark, r * 0.12, true)
-			for k in 3:
-				var ca := -PI / 2.0 + TAU * k / 3.0
-				var w := PackedVector2Array()
-				w.append(ctr + Vector2.from_angle(ca - 0.28) * r * 0.32)
-				for i in 5:
-					w.append(ctr + Vector2.from_angle(ca - 0.28 + 0.56 * i / 4.0) * r * 0.88)
-				w.append(ctr + Vector2.from_angle(ca + 0.28) * r * 0.32)
-				c.draw_colored_polygon(w, col)
-			c.draw_circle(ctr, r * 0.16, Color(0.03, 0.09, 0.05, 1.0))
-		_:
-			var pts := _rank_polygon(int(m["sh"]), r * 0.92, ctr)
-			if pts.size() >= 3:
-				c.draw_colored_polygon(pts, dark)
-				var outline := pts.duplicate()
-				outline.append(pts[0])
-				c.draw_polyline(outline, col, r * 0.13, true)
-	var pips := int(m["pips"])
-	for i in pips:
-		c.draw_circle(Vector2(ctr.x + (float(i) - float(pips - 1) * 0.5) * r * 0.52, ctr.y + r * 1.24), r * 0.14, col)
-
-func _draw_logo(c: Control, s: float) -> void:
-	var r := 26.0 * s
-	var ctr := Vector2(r * 1.2, r * 1.2)
-	var gold := Color(0.86, 0.69, 0.22)
-	var white := Color(0.95, 0.97, 1.0, 0.95)
-	c.draw_circle(ctr, r, Color(0.05, 0.12, 0.2, 0.95))
-	c.draw_arc(ctr, r, 0, TAU, 40, gold, 3.5 * s, true)
-	c.draw_arc(ctr + Vector2(0, -r * 0.62), r * 0.2, 0, TAU, 16, white, 2.2 * s, true)
-	c.draw_line(ctr + Vector2(0, -r * 0.42), ctr + Vector2(0, r * 0.55), white, 2.6 * s, true)
-	c.draw_line(ctr + Vector2(-r * 0.34, -r * 0.16), ctr + Vector2(r * 0.34, -r * 0.16), white, 2.6 * s, true)
-	c.draw_arc(ctr + Vector2(0, -r * 0.05), r * 0.5, PI * 0.12, PI * 0.88, 24, white, 2.6 * s, true)
-
-func _draw_big_logo(c: Control) -> void:
-	var gold := Color(0.86, 0.69, 0.22)
-	_draw_logo(c, 1.0)
-	var wp := c.get_theme_default_font()
-	if wp == null:
-		return
-	c.draw_string(wp, Vector2(78, 66), "NAVAL", HORIZONTAL_ALIGNMENT_LEFT, -1, 52, Color.WHITE)
-	c.draw_string(wp, Vector2(288, 66), ".IO", HORIZONTAL_ALIGNMENT_LEFT, -1, 52, gold)
-	c.draw_string(wp, Vector2(80, 92), "CARRIER VS BATTLESHIP  -  TEN TIERS OF STEEL", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1, 1, 1, 0.75))
-
-# ---------------- LOGIN ----------------
-
-func _build_login() -> void:
-	login_root = Control.new()
-	root.add_child(login_root)
-	login_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var bg := ColorRect.new()
-	bg.color = Color(0.008, 0.025, 0.055, 1.0)
-	login_root.add_child(bg)
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var cc := CenterContainer.new()
-	login_root.add_child(cc)
-	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var card := _panel(cc, Color(0.03, 0.08, 0.15, 0.99), 28.0, 16)
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 14)
-	card.add_child(v)
-	var big_logo := Control.new()
-	big_logo.custom_minimum_size = Vector2(320, 80)
-	big_logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	big_logo.draw.connect(_draw_big_logo.bind(big_logo))
-	v.add_child(big_logo)
-	_label(v, "WELCOME ABOARD, CAPTAIN", 18, Color(0.86, 0.69, 0.22)).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var note := _label(v, "CREATE ACCOUNT the first time (pick a name + password). Same password and name = same fleet, level, rank and battle pass on every device and download.", 13, TEXT_DIM)
+func _build_controls() -> void:
+	controls_root = Control.new()
+	root.add_child(controls_root)
+	controls_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	controls_root.visible = false
+	var dim2 := ColorRect.new()
+	dim2.color = Color(0.0, 0.04, 0.10, 0.92)
+	controls_root.add_child(dim2)
+	dim2.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var card := _panel(controls_root, PANEL_BG, 22.0, 14)
+	card.set_anchors_preset(Control.PRESET_CENTER)
+	card.custom_minimum_size = Vector2(560, 0)
+	var cv2 := VBoxContainer.new()
+	cv2.add_theme_constant_override("separation", 10)
+	card.add_child(cv2)
+	var ct := _label(cv2, "CONTROLS", 30, Color.WHITE)
+	ct.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	for action in SettingsScript.KEY_LABELS.keys():
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 16)
+		cv2.add_child(row)
+		var lbl := _label(row, str(SettingsScript.KEY_LABELS[action]), 16, TEXT)
+		lbl.custom_minimum_size = Vector2(220, 0)
+		_label(row, _key_name(str(action)), 16, ACCENT_HI)
+	var note := _label(cv2, "Fire with the left or right mouse button too. Number keys 1-9 pick weapons. Change these in Settings > Controls.", 13, TEXT_DIM)
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.custom_minimum_size = Vector2(420, 0)
-	login_nick = LineEdit.new()
-	login_nick.placeholder_text = "Nickname  (only needed when creating an account)"
-	login_nick.max_length = 14
-	login_nick.custom_minimum_size = Vector2(0, 44)
-	login_nick.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	login_nick.add_theme_font_size_override("font_size", 16)
-	var lne := StyleBoxFlat.new()
-	lne.bg_color = Color(0, 0, 0, 0.4)
-	lne.set_corner_radius_all(10)
-	lne.set_content_margin_all(8)
-	lne.border_color = Color(1, 1, 1, 0.15)
-	lne.set_border_width_all(1)
-	var lnf := lne.duplicate() as StyleBoxFlat
-	lnf.border_color = Color(0.30, 0.65, 1.0)
-	lnf.set_border_width_all(2)
-	login_nick.add_theme_stylebox_override("normal", lne)
-	login_nick.add_theme_stylebox_override("focus", lnf)
-	login_nick.add_theme_color_override("font_color", Color.WHITE)
-	login_nick.add_theme_color_override("font_placeholder_color", Color(1, 1, 1, 0.4))
-	v.add_child(login_nick)
-	login_pin = LineEdit.new()
-	login_pin.secret = true
-	login_pin.secret_character = "x"
-	login_pin.placeholder_text = "Password"
-	login_pin.custom_minimum_size = Vector2(0, 46)
-	login_pin.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	login_pin.add_theme_font_size_override("font_size", 18)
-	var ne := StyleBoxFlat.new()
-	ne.bg_color = Color(0, 0, 0, 0.4)
-	ne.set_corner_radius_all(10)
-	ne.set_content_margin_all(8)
-	ne.border_color = Color(1, 1, 1, 0.15)
-	ne.set_border_width_all(1)
-	var nf := ne.duplicate() as StyleBoxFlat
-	nf.border_color = Color(0.86, 0.69, 0.22)
-	nf.set_border_width_all(2)
-	login_pin.add_theme_stylebox_override("normal", ne)
-	login_pin.add_theme_stylebox_override("focus", nf)
-	login_pin.add_theme_color_override("font_color", Color.WHITE)
-	v.add_child(login_pin)
-	login_pin.text_submitted.connect(func(_t: String): _login_confirm())
-	login_err = _label(v, "", 12, Color(1.0, 0.5, 0.45))
-	login_err.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	v.add_child(row)
-	var mk := _make_button(row, "CREATE ACCOUNT", 15, Vector2(0, 50), Color(0.10, 0.44, 0.30))
-	mk.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	mk.pressed.connect(_create_confirm)
-	var go := _make_button(row, "LOG IN", 15, Vector2(120, 50))
-	go.pressed.connect(_login_confirm)
-	var guest := _make_button(row, "GUEST", 14, Vector2(90, 50), Color(0.3, 0.34, 0.4))
-	guest.pressed.connect(_login_guest)
-	var hint2 := _label(v, "Passwords are case sensitive. Forgetting it means a new empty fleet - there is no recovery, this game has no servers.", 11, TEXT_DIM)
-	hint2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint2.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint2.custom_minimum_size = Vector2(420, 0)
-
-func _build_join() -> void:
-	join_root = Control.new()
-	root.add_child(join_root)
-	join_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	join_root.visible = false
-	var bg := ColorRect.new()
-	bg.color = Color(0.008, 0.025, 0.055, 0.94)
-	join_root.add_child(bg)
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var cc := CenterContainer.new()
-	join_root.add_child(cc)
-	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var card := _panel(cc, Color(0.03, 0.08, 0.15, 0.99), 28.0, 16)
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 14)
-	card.add_child(v)
-	_label(v, "JOIN A FRIEND'S BATTLE", 20, Color(0.86, 0.69, 0.22)).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var note := _label(v, "The host presses HOST ONLINE MATCH and a public internet address appears on their screen. Type that address here - both must run the same version of the game.", 13, TEXT_DIM)
-	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.custom_minimum_size = Vector2(460, 0)
-	join_ip_edit = LineEdit.new()
-	join_ip_edit.placeholder_text = "host address (like 84.123.x.x or 192.168.1.20)"
-	join_ip_edit.custom_minimum_size = Vector2(0, 46)
-	join_ip_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	join_ip_edit.add_theme_font_size_override("font_size", 16)
-	var je := StyleBoxFlat.new()
-	je.bg_color = Color(0, 0, 0, 0.4)
-	je.set_corner_radius_all(10)
-	je.set_content_margin_all(8)
-	je.border_color = Color(1, 1, 1, 0.15)
-	je.set_border_width_all(1)
-	var jf := je.duplicate() as StyleBoxFlat
-	jf.border_color = Color(0.86, 0.69, 0.22)
-	jf.set_border_width_all(2)
-	join_ip_edit.add_theme_stylebox_override("normal", je)
-	join_ip_edit.add_theme_stylebox_override("focus", jf)
-	join_ip_edit.add_theme_color_override("font_color", Color.WHITE)
-	v.add_child(join_ip_edit)
-	join_ip_edit.text_submitted.connect(func(_t: String): _join_confirm())
-	join_err = _label(v, "", 12, Color(1.0, 0.5, 0.45))
-	join_err.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	v.add_child(row)
-	var go := _make_button(row, "JOIN BATTLE", 18, Vector2(0, 50), Color(0.45, 0.33, 0.12))
-	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	go.pressed.connect(_join_confirm)
-	var cancel := _make_button(row, "CANCEL", 14, Vector2(110, 50), Color(0.3, 0.34, 0.4))
-	cancel.pressed.connect(_join_cancel)
-	var mlbl := _label(v, "MATCHES FOUND ON THIS NETWORK", 13, Color(0.86, 0.69, 0.22))
-	match_msg = _label(v, "Searching for nearby matches...", 12, TEXT_DIM)
-	match_list = VBoxContainer.new()
-	match_list.add_theme_constant_override("separation", 6)
-	v.add_child(match_list)
-	var hint := _label(v, "Strangers on the same wifi appear here automatically. Someone on another internet connection? The host Copies their address (shown after hosting) and sends it to you - the game has no master server, so across the internet the address is how you find each other.", 11, TEXT_DIM)
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.custom_minimum_size = Vector2(460, 0)
-
-func _open_join() -> void:
-	if join_root == null:
-		return
-	join_ip_edit.text = ""
-	join_err.text = ""
-	match_msg.text = "Searching for nearby matches..."
-	for r in match_rows:
-		(r as Control).queue_free()
-	match_rows.clear()
-	join_root.visible = true
-
-func set_host_addr(addr: String) -> void:
-	if host_addr_lbl != null:
-		host_addr_lbl.text = addr
-
-func set_matches(ms: Array) -> void:
-	if match_list == null or not join_root.visible:
-		return
-	for r in match_rows:
-		(r as Control).queue_free()
-	match_rows.clear()
-	if ms.is_empty():
-		match_msg.text = "No matches on this network yet - keep this open while the host starts one."
-		return
-	match_msg.text = "%d match(es) found - click to join:" % ms.size()
-	for m in ms:
-		var txt := "%s  -  %s" % [str(m[1]), str(m[0])]
-		var b := _make_button(match_list, txt, 13, Vector2(460, 34), Color(0.16, 0.40, 0.30))
-		b.pressed.connect(func():
-			audio_click()
-			join_ip_edit.text = str(m[0])
-			_join_confirm())
-		match_rows.append(b)
-
-func _join_cancel() -> void:
-	if join_root != null:
-		join_root.visible = false
-	audio_click()
-
-func _join_confirm() -> void:
-	if join_root == null:
-		return
-	var ip := join_ip_edit.text.strip_edges()
-	if ip.is_empty():
-		join_err.text = "Type the host's address first."
-		return
-	join_root.visible = false
-	join_requested.emit(ip)
-
-func _nick_strict(n: String) -> bool:
-	if not D.nick_ok(n):
-		return false
-	for bad in ["<", ">", "&", "/", "\\", "{", "}"]:
-		if n.contains(bad):
-			return false
-	return true
-
-func _create_confirm() -> void:
-	var nick := login_nick.text.strip_edges()
-	var pin := login_pin.text.strip_edges()
-	if nick.is_empty():
-		login_err.text = "Pick a nickname first."
-		return
-	if not _nick_strict(nick) or nick.length() < 3:
-		login_err.text = "That nickname is not allowed (3-14 letters, nothing rude)."
-		return
-	if pin.length() < 4:
-		login_err.text = "Password needs at least 4 characters."
-		return
-	var r := S.create_account(pin, nick)
-	if r == 1:
-		login_err.text = "That password is already used. Use LOG IN."
-		return
-	if r != 0:
-		login_err.text = "Could not create the account. Try again."
-		return
-	_after_login(nick)
-
-func _login_confirm() -> void:
-	var pin := login_pin.text.strip_edges()
-	if pin.is_empty():
-		login_err.text = "Type a password first."
-		return
-	if S.load_account(pin):
-		_after_login(str(S.d.get("nick", "Captain")))
-	else:
-		login_err.text = "No account with that password. Create one first." if S.login_missing else "Login failed."
-
-func _after_login(nname: String) -> void:
-	login_root.visible = false
-	guest_mode = false
-	name_edit.text = str(S.d.get("nick", "Captain"))
-	_refresh_menu_meta()
-	_fill_progress()
-	_fill_profile()
-	toast("Welcome to the fleet, %s" % nname)
-
-func _login_guest() -> void:
-	guest_mode = true
-	login_root.visible = false
-	audio_click()
-
-# ---------------- BATTLE RESULTS (exit progress) ----------------
-
-func _build_results() -> void:
-	results_root = Control.new()
-	root.add_child(results_root)
-	results_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var bg := ColorRect.new()
-	bg.color = Color(0.008, 0.025, 0.055, 0.9)
-	results_root.add_child(bg)
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var cc := CenterContainer.new()
-	results_root.add_child(cc)
-	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var card := _panel(cc, Color(0.03, 0.08, 0.15, 0.99), 26.0, 16)
-	card.custom_minimum_size = Vector2(620, 0)
-	res_box = VBoxContainer.new()
-	res_box.add_theme_constant_override("separation", 12)
-	card.add_child(res_box)
-
-func show_battle_results(res: Dictionary) -> void:
-	menu_root.visible = true
-	_refresh_menu_meta()
-	if results_root == null:
-		return
-	results_root.visible = true
-	res_ri = int(res.get("ri1", 0))
-	_clear(res_box)
-	var t := _label(res_box, "BATTLE REPORT", 30, Color.WHITE)
-	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var mins := int(res.get("time", 0)) / 60
-	var secs := int(res.get("time", 0)) % 60
-	_label(res_box, "%d:%02d at sea  -  %d ships sunk  -  %d damage  -  %d score" % [mins, secs, int(res.get("kills", 0)), int(res.get("dmg", 0)), int(res.get("score", 0))], 14, TEXT).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_label(res_box, "EXPERIENCE", 13, ACCENT_HI)
-	var xp_res := _bar(res_box, 12.0, ACCENT_HI)
-	var lvl_gain := int(res.get("lvl1", 0)) - int(res.get("lvl0", 0))
-	var lvl_txt := "LEVEL %d" % int(res.get("lvl1", 0))
-	if lvl_gain > 0:
-		lvl_txt = "LEVEL UP!  NOW LEVEL %d" % int(res.get("lvl1", 0))
-	var lvl_lbl := _label(res_box, lvl_txt + ("   +%d XP" % (int(res.get("xp1", 0)) - int(res.get("xp0", 0)))), 16, GOOD if lvl_gain > 0 else TEXT)
-	lvl_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lvl_lbl.pivot_offset = Vector2(280, 14)
-	if int(res.get("ranked", 0)):
-		_label(res_box, "RANKED RATING", 13, WARN)
-		var rank_row := HBoxContainer.new()
-		rank_row.add_theme_constant_override("separation", 14)
-		res_box.add_child(rank_row)
-		_badge_node(rank_row, int(res.get("ri1", 0)), 26.0)
-		var rv := VBoxContainer.new()
-		rv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		rank_row.add_child(rv)
-		var drp := int(res.get("rp1", 0)) - int(res.get("rp0", 0))
-		var rip := _bar(rv, 12.0, WARN)
-		var rr := _label(rv, "%s  ->  %s    (%+d RP)" % [str(D.RANKS[int(res.get("ri0", 0))][1]), str(D.RANKS[int(res.get("ri1", 0))][1]), drp], 16, GOOD if drp >= 0 else BAD)
-		rr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		var flare := ColorRect.new()
-		flare.color = Color(1.0, 0.85, 0.35, 0.55)
-		flare.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		flare.visible = int(res.get("ri1", 0)) > int(res.get("ri0", 0))
-		res_box.add_child(flare)
-		flare.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		rank_row.pivot_offset = Vector2(60, 34)
-		var tw2 := create_tween()
-		tw2.tween_property(rip, "value", 1.0, 1.3).from(0.0).set_delay(0.9).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-		if flare.visible:
-			tw2.tween_property(rank_row, "scale", Vector2(1.35, 1.35), 0.3).from(Vector2(0.7, 0.7)).set_delay(1.6).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-			tw2.parallel().tween_property(flare, "modulate:a", 0.0, 1.1).from(1.0).set_delay(1.7)
-	if int(res.get("bp", 0)) > 0 or true:
-		_label(res_box, "BATTLE PASS: +%d points earned this battle" % int(res.get("bp", 0)), 14, Color(0.86, 0.69, 0.22)).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var gotcha := _label(res_box, "Progress is saved to your password account.", 11, TEXT_DIM)
-	gotcha.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var back := _make_button(res_box, "BACK TO PORT", 20, Vector2(0, 56))
-	back.pressed.connect(func():
-		results_root.visible = false
-		audio_click())
-	var tw := create_tween()
-	tw.tween_property(xp_res, "value", clampf(float(int(res.get("xp_have", 0))) / float(maxi(int(res.get("xp_need", 1)), 1)), 0.0, 1.0), 1.3).from(0.0).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	if lvl_gain > 0:
-		tw.tween_property(lvl_lbl, "scale", Vector2(1.3, 1.3), 0.3).from(Vector2(0.7, 0.7)).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-# ---------------- menu helpers (tier select, ranked, meta) ----------------
+	var cb := _make_button(cv2, "BACK", 17, Vector2(0, 44), Color(0.3, 0.34, 0.4))
+	cb.pressed.connect(_close_controls)
 
 func _fill_menu_cards(tier: int) -> void:
 	_clear(fleet_grid)
@@ -1963,13 +1105,10 @@ func _fill_menu_cards(tier: int) -> void:
 	for def in opts:
 		var d: Dictionary = def
 		var locked := not D.unlocked(d, lvl)
-		var played := S.has_played(str(d["id"]))
-		var txt: String = "Level %d" % int(d.get("lvl", 1)) if locked else ("SERVED ON THIS HULL" if played else "NOT FLOWN YET")
-		var cd := _ship_card(d, txt, _fleet_pick.bind(str(d["id"])), 240.0, true)
+		var txt := "Level %d" % int(d.get("lvl", 1)) if locked else "AVAILABLE"
+		var cd := _ship_card(d, txt, _sel_tier.bind(tier), 240.0, true)
 		if locked:
-			cd.modulate = Color(1, 1, 1, 0.4)
-		elif not played:
-			cd.modulate = Color(0.72, 0.72, 0.76, 0.92)
+			cd.modulate = Color(1, 1, 1, 0.45)
 		fleet_grid.add_child(cd)
 	_select_tier_hl(tier)
 	_refresh_menu_meta()
@@ -1992,12 +1131,9 @@ func _toggle_ranked() -> void:
 
 func _refresh_menu_meta() -> void:
 	var meta := D.level_progress(int(S.d.get("xp", 0)))
-	var nick := str(S.d.get("nick", "Captain"))
-	if name_edit != null and not str(name_edit.text).strip_edges().is_empty():
-		nick = str(name_edit.text).strip_edges()
-	profile_lbl.text = "%s   -   Level %d   -   %d / %d XP" % [nick, int(meta["lvl"]), int(meta["have"]), int(meta["need"])]
+	profile_lbl.text = "%s   -   Level %d   -   %d / %d XP" % [name_edit.text.strip_edges() if name_edit.text.strip_edges() != "" else "Captain", meta["lvl"], meta["have"], meta["need"]]
 	rank_lbl.text = "RANK: %s" % str(D.rank_from_rp(int(S.d.get("rp", 0))))
-	meta_bar.value = clampf(float(meta["have"]) / float(maxi(int(meta["need"]), 1)), 0.0, 1.0)
+	meta_bar.value = clampf(float(meta["have"]) / float(maxi(meta["need"], 1)), 0.0, 1.0)
 	ranked_btn.text = "RANKED: ON" if S.b("ranked_mode") else "RANKED: OFF"
 	ranked_btn.modulate = Color(1.0, 0.78, 0.35) if S.b("ranked_mode") else Color(1, 1, 1, 0.85)
 
@@ -2010,43 +1146,29 @@ func _on_play_clicked() -> void:
 		start = str(D.of_tier(1)[0]["id"])
 	play_pressed.emit(name_edit.text, start)
 
-# ---------------- Settings ----------------
+# ---------------- Settings window ----------------
 
-func _page_configs() -> Control:
-	var pg := Control.new()
-	pg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	page_box.add_child(pg)
-	_rect(pg, 0, 0, 0, 0, 0, 0, 0, 0)
+func _build_settings() -> void:
+	settings_root = Control.new()
+	root.add_child(settings_root)
+	settings_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0.02, 0.06, 0.6)
+	settings_root.add_child(dim)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var center := CenterContainer.new()
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	settings_root.add_child(center)
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var card := _panel(center, Color(0.03, 0.08, 0.15, 0.97), 16.0, 14)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
-	pg.add_child(v)
-	_rect(v, 0, 0, 0, 0, 0, 0, 0, 0)
-	var head := HBoxContainer.new()
-	v.add_child(head)
-	var t := _label(head, "SETTINGS", 30, Color.WHITE)
-	t.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	var sp := Control.new()
-	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(sp)
-	var back := _make_button(head, "BACK TO PORT", 15, Vector2(170, 44), Color(0.3, 0.34, 0.4))
-	back.pressed.connect(_goto.bind("home"))
-	var tabs := _make_settings_tabs()
-	tabs.custom_minimum_size = Vector2(0, 0)
-	tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	v.add_child(tabs)
-	var brow := HBoxContainer.new()
-	brow.add_theme_constant_override("separation", 10)
-	v.add_child(brow)
-	var reset := _make_button(brow, "Reset to defaults", 15, Vector2(200, 40), Color(0.5, 0.25, 0.22))
-	reset.pressed.connect(_reset_settings)
-	var notice := _label(brow, "Esc in battle opens the battle menu with the exit option.", 12, TEXT_DIM)
-	notice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	notice.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	return pg
-
-func _make_settings_tabs() -> TabContainer:
+	card.add_child(v)
+	var t := _label(v, "Settings", 26)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var tabs := TabContainer.new()
 	tabs.custom_minimum_size = Vector2(640, 380)
+	v.add_child(tabs)
 
 	var a := _tab(tabs, "Audio")
 	_s_check(a, "Mute all sound", "mute")
@@ -2067,19 +1189,17 @@ func _make_settings_tabs() -> TabContainer:
 	_s_check(g, "V-Sync", "vsync")
 	_s_check(g, "Fullscreen", "fullscreen")
 	_s_check(g, "Show FPS counter", "show_fps")
-	_s_slider(g, "Menu / HUD size", "ui_scale", 0.7, 1.8, 0.1, false)
-	set_ctrls["ui_scale"]["c"].value_changed.connect(func(_v: float): _apply_ui_scale())
 
-	var p2 := _tab(tabs, "Gameplay")
-	_s_slider(p2, "Number of AI ships", "bots", 4.0, 50.0, 1.0, false)
-	_s_option(p2, "AI difficulty", "difficulty", ["Easy", "Normal", "Hard"], [0, 1, 2])
-	_s_check(p2, "Fog of war (hide ships you have not spotted)", "fog")
-	_s_check(p2, "Show ship names", "names")
-	_s_check(p2, "Show health bars", "hpbars")
-	_s_check(p2, "Show damage numbers", "dmgnums")
-	_s_check(p2, "Show aim line", "aimline")
-	_s_check(p2, "Show minimap", "minimap")
-	_s_slider(p2, "Mouse-wheel zoom speed", "zoom_sens", 0.5, 2.0, 0.1, false)
+	var p := _tab(tabs, "Gameplay")
+	_s_slider(p, "Number of AI ships", "bots", 4.0, 50.0, 1.0, false)
+	_s_option(p, "AI difficulty", "difficulty", ["Easy", "Normal", "Hard"], [0, 1, 2])
+	_s_check(p, "Fog of war (hide ships you have not spotted)", "fog")
+	_s_check(p, "Show ship names", "names")
+	_s_check(p, "Show health bars", "hpbars")
+	_s_check(p, "Show damage numbers", "dmgnums")
+	_s_check(p, "Show aim line", "aimline")
+	_s_check(p, "Show minimap", "minimap")
+	_s_slider(p, "Mouse-wheel zoom speed", "zoom_sens", 0.5, 2.0, 0.1, false)
 
 	var c := _tab(tabs, "Controls")
 	for action in SettingsScript.KEY_LABELS.keys():
@@ -2093,43 +1213,16 @@ func _make_settings_tabs() -> TabContainer:
 	var note := _label(c, "Fire with the left or right mouse button too. Number keys 1-9 pick weapons. Click a key, then press the new key (Esc cancels).", 12, TEXT_DIM)
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	note.custom_minimum_size = Vector2(560, 0)
-	return tabs
 
-func _build_settings() -> void:
-	settings_root = Control.new()
-	root.add_child(settings_root)
-	settings_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0.02, 0.06, 0.6)
-	settings_root.add_child(dim)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var center := CenterContainer.new()
-	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	settings_root.add_child(center)
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var card := _panel(center, Color(0.03, 0.08, 0.15, 0.97), 16.0, 14)
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 10)
-	card.add_child(v)
-	var t := _label(v, "Settings", 26)
-	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(_make_settings_tabs())
 	var brow := HBoxContainer.new()
 	brow.add_theme_constant_override("separation", 10)
 	v.add_child(brow)
-	exit_btn = _make_button(brow, "EXIT BATTLE  (calculate result)", 15, Vector2(300, 40), Color(0.62, 0.28, 0.18))
-	exit_btn.visible = false
-	exit_btn.pressed.connect(_exit_battle)
 	var reset := _make_button(brow, "Reset to defaults", 15, Vector2(200, 40), Color(0.5, 0.25, 0.22))
 	reset.pressed.connect(_reset_settings)
 	var close := _make_button(brow, "Close  (Esc)", 16, Vector2(0, 40))
 	close.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	close.pressed.connect(close_settings)
 	settings_root.visible = false
-
-func _exit_battle() -> void:
-	close_settings()
-	exit_requested.emit()
 
 func _tab(tabs: TabContainer, title: String) -> VBoxContainer:
 	var sc := ScrollContainer.new()
@@ -2228,8 +1321,6 @@ func _reset_settings() -> void:
 
 func open_settings() -> void:
 	_sync_settings()
-	if exit_btn != null:
-		exit_btn.visible = in_battle and game != null
 	settings_root.visible = true
 	settings_open = true
 
@@ -2242,29 +1333,20 @@ func close_settings() -> void:
 
 func show_menu() -> void:
 	menu_root.visible = true
+	fleet_root.visible = false
+	controls_root.visible = false
 	hud_root.visible = false
-	if leave_btn != null:
-		leave_btn.visible = false
 	respawn_root.visible = false
 	levelup_root.visible = false
 	promo_banner.visible = false
-	if results_root != null:
-		results_root.visible = false
-	if login_root != null:
-		login_root.visible = not S.logged_in and not guest_mode
-	if join_root != null:
-		join_root.visible = false
 	_refresh_menu_meta()
 	_fill_menu_cards(menu_tier)
-	_fill_progress()
-	_fill_profile()
-	_goto(page, true)
+	name_edit.grab_focus()
 
 func show_game() -> void:
 	menu_root.visible = false
 	hud_root.visible = true
 	respawn_root.visible = false
-	leave_btn.visible = in_battle
 
 func set_fps_visible(v: bool) -> void:
 	lbl_fps.visible = v

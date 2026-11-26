@@ -9,9 +9,9 @@ Open `project.godot` in Godot 4 and press F5.
 |---|---|
 | `data.gd` | **All content**: 10 tiers, 47 ships (carriers, 5 submarines, super-battleships), 20 weapons, aircraft, abilities, XP levels and competitive ranks. Add ships/weapons here. |
 | `main.gd` | World, warzone border, ramming, ship renderer, weapon mounts, squadrons, projectiles, fire/flood, detection, AI, effects |
-| `ui.gd` | Multi-page main menu (PORT / PROFILE / FLEET / BATTLE PASS / SETTINGS), password login screen, rank badges, logo, fleet browser with full ship profiles, battle-pass page, battle report screen with animated rank math, HUD, promotion / respawn pop-ups |
+| `ui.gd` | Full-screen main menu (profile card, ranked toggle, fleet browser, controls page), HUD, hit / low-health screen flashes, promotion / respawn pop-ups, settings window |
 | `audio.gd` | Procedural layered sound synthesis (no audio files needed) |
-| `settings.gd` | All options + key bindings + meta progression + password accounts (20-day seasons), saved to `user://naval_io_settings.cfg` and `user://naval_io_accounts.cfg` |
+| `settings.gd` | All options + key bindings + meta progression (XP / RP), saved to `user://naval_io_settings.cfg` |
 | `water.gdshader` | Ocean shader (3 quality levels) |
 
 ## What's new in this version
@@ -36,33 +36,6 @@ Open `project.godot` in Godot 4 and press F5.
 * **Full-screen main menu** with a profile card (nick, level, XP bar, rank), ranked toggle, FLEET browser page (all 47 ships across tiers I-X with level locks), CONTROLS page and settings; every battle starts at Tier I and you promote in-battle by earning score.
 * **More realistic sound**: guns and explosions are layered (crack + boom + rumble + echoes), sinking
   ships gurgle and groan.
-
-## What's new in the feature-storm update
-* **Passenger login**: on first launch you pick a password - any password becomes its own account
-  (ships you've flown, XP, level, rank, battle pass). Same password on any download of the game on
-  that PC = same account. Guest mode works too but progress stays on the machine.
-* **Multi-page menu**: PORT (play + logo), PROFILE (rank badge, stats, hull paints, logout),
-  FLEET (browser with played/locked states and a full profile panel for every one of the 47 ships),
-  BATTLE PASS (20 tiers + daily missions + rank ladder), SETTINGS.
-* **Ranks have drawn badges** - circles for Rookie, shields for Bronze/Silver/Gold, hexes for
-  Platinum/Diamond, stars for Master/Elite, a crown for Legend and a radiation trefoil for PLUTONIUM.
-* **Battle pass**: earn BP points from XP and daily missions (3 a day, chosen by date, easy/normal/hard
-  targets). Spend points on 20 reward tiers: XP, ranked rating and 6 unlockable hull paints you can
-  select from the Profile page. Season (rank + pass + missions) resets every 20 days.
-* **Exit battle with a battle report**: Esc -> Exit Battle creates a report with animated progress
-  bars for XP and rank rating, level-up and RANK-UP flares with the badge popping in.
-* **Sinking theater**: capital ships (90m+) now sink for 9-16 seconds, listing to one side,
-  burning and smoking, with bubbles and a final water column instead of a 2-second fade.
-* **Salvo drama**: heavy gun salvos (bore 200mm+) from ANY ship near the camera shake the screen,
-  with big muzzle flash, shockwave ring and smoke. Shells that miss spawn towering near-miss
-  water columns.
-* **Carrier aircraft buffed**: every aircraft got 40-55% more HP, air weapons hit harder across
-  the board so carriers actually project power.
-* **Submarines buffed**: +30% HP, +8% speed, dive has NO cooldown (dive as often as you need,
-  16 s underwater per use), dived subs move 25% faster and can throttle deeper.
-* **Nickname filter**: rude/18+ nicknames (including l33t-speak work-arounds) are blocked and
-  renamed.
-* **New logo**: drawn in-code - gold-ringed anchor emblem with the NAVAL.IO wordmark.
 
 ## Controls (rebindable in Settings -> Controls)
 * W/S throttle, A/D steer, mouse aims
@@ -105,10 +78,3 @@ Open `project.godot` in Godot 4 and press F5.
   helicopters attack, scouts mark you for focus fire.
 * AI ships pick fights near their own tier, keep their range, retreat when out-tiered and dive
   (submarines) or hide (smoke) when badly hurt.
-
-## Multiplayer status (honest note)
-An "add servers so two people on the internet can match" request is **not implemented**: this
-project ships no game server, and a Godot .io clone on the public internet needs hosted servers
-(a relay/dedicated server running somewhere). The account system (password login) is the
-groundwork for that - but real online matchmaking needs someone to host a server, which is
-outside what this repo can do today.

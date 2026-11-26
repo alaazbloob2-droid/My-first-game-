@@ -137,6 +137,9 @@ class Ship extends RefCounted:
 	var mark_t := 0.0
 	var invuln := 0.0
 	var sink_t := 0.0
+	var sink_max := 2.0
+	var sink_list := 0.0
+	var dmg_d := 0.0
 	var smoke_emit := 0.0
 	var fire_emit := 0.0
 	var has_pd := false
@@ -429,6 +432,8 @@ func _setup_ui() -> void:
 	ui.map_world = WORLD
 	ui.map_zone = zone_pts
 	ui.setup(S)
+	ui.game = self
+	ui.exit_requested.connect(request_exit)
 	ui.play_pressed.connect(_on_play)
 	ui.ship_picked.connect(_on_ship_picked)
 	ui.slot_clicked.connect(_select_weapon)
@@ -1815,6 +1820,9 @@ func _unhandled_input(e: InputEvent) -> void:
 
 func _on_play(nick: String, ship_id: String) -> void:
 	var n := nick.strip_edges()
+	if not D.nick_ok(n):
+		ui.toast("That nickname is not allowed - renamed.")
+		n = "Sailor"
 	player.nick = n if n != "" else "Player"
 	if n != "" :
 		S.d["nick"] = n
@@ -1825,11 +1833,24 @@ func _on_play(nick: String, ship_id: String) -> void:
 			def = opt
 			break
 	_spawn(player, def)
+	player.color = _player_paint()
 	fire_lock = 0.4
 	cam.position = player.pos
 	state = State.PLAYING
 	promo_open = false
 	death_pending = false
+	_ensure_missions()
+	battle_xp0 = int(S.d.get("xp", 0))
+	battle_rp0 = int(S.d.get("rp", 0))
+	battle_bp0 = int(S.d.get("bp", 0))
+	battle_kills = 0
+	battle_dmg = 0.0
+	battle_time = 0.0
+	battle_promos = 0
+	in_battle = true
+	S.d["battles"] = int(S.d.get("battles", 0)) + 1
+	S.mark_played(String(def["id"]))
+	settings_dirty = true
 	ui.show_game()
 	_refresh_loadout()
 	audio.play_ui("click")
@@ -1854,6 +1875,7 @@ func _on_ship_picked(ship_id: String, mode: String) -> void:
 			return
 		death_pending = false
 		_spawn(player, def)
+		player.color = _player_paint()
 		fire_lock = 0.4
 		cam.position = player.pos
 		state = State.PLAYING
@@ -2209,14 +2231,21 @@ func _fire_effects(s: Ship, wd: Dictionary, origin: Vector2, ang: float) -> void
 		_add_fx(2, origin, 6.0, 0.08, Color(1.0, 0.9, 0.5), ang)
 	else:
 		_add_fx(4, origin, 12.0, 0.8, Color(0.9, 0.9, 0.9))
+	var near := origin.distance_squared_to(cam.position) < 2200.0 * 2200.0
 	if s.is_player:
 		audio.play(str(wd["snd"]), origin, 0.0)
 		var sk := 1.0
 		if vis == "gun":
 			sk = float(wd["bw"]) * 0.9
 		shake = maxf(shake, sk * S.f("shake"))
-	elif origin.distance_squared_to(cam.position) < 2300.0 * 2300.0:
+	elif near:
 		audio.play(str(wd["snd"]), origin, -4.0)
+	if near and vis == "gun" and float(wd["bw"]) >= 2.0:
+		# salvo drama: heavy broadsides rattle the camera even from other ships
+		shake = maxf(shake, (float(wd["bw"]) - 1.6) * 6.0 * S.f("shake"))
+		_add_fx(2, origin, big * 1.7, 0.2, Color(1.0, 0.75, 0.35), ang)
+		_add_fx(7, origin + Vector2.from_angle(ang) * 10.0, big * 2.4, 0.5, Color(1.0, 0.8, 0.5))
+		_add_fx(4, origin + Vector2.from_angle(ang) * 16.0, big * 1.5, 1.2, Color(0.75, 0.75, 0.78))
 
 func _spawn_shot(s: Ship, w: WRT, origin: Vector2, ang: float, tgt: Vector2, carry: Vector2 = Vector2.ZERO) -> void:
 	if shots.size() >= MAX_SHOTS:
@@ -2569,9 +2598,14 @@ func _shot_expire(sh: Shot) -> void:
 	elif sh.kind == K_TORP:
 		_add_fx(1, sh.pos, 12.0, 0.45)
 	else:
-		_add_fx(1, sh.pos, 16.0 if sh.kind == K_SHELL else 12.0, 0.55)
-		if rng.randf() < 0.3 and sh.pos.distance_squared_to(cam.position) < 1500.0 * 1500.0:
-			audio.play("splash", sh.pos, -8.0)
+		var is_shell := sh.kind == K_SHELL
+		_add_fx(1, sh.pos, 16.0 if is_shell else 12.0, 0.55)
+		if is_shell:
+			# near-miss: a towering water column where the shell splashed down
+			_add_fx(8, sh.pos, maxf(24.0, sh.spl * 1.5), 1.25)
+		var chance := 0.7 if is_shell else 0.3
+		if sh.pos.distance_squared_to(cam.position) < 1500.0 * 1500.0 and rng.randf() < chance:
+			audio.play("splash", sh.pos, -3.0 if is_shell else -8.0)
 
 # ---------------- Damage / kills / progression ----------------
 
@@ -2585,6 +2619,11 @@ func _damage(s: Ship, dmg: float, killer: Ship) -> void:
 	s.flash = 1.0
 	if killer != null:
 		killer.reveal_t = maxf(killer.reveal_t, 3.0)
+		if killer.alive:
+			killer.dmg_d += dd
+			if killer.is_player:
+				battle_dmg += dd
+				_mission_bump("dmg", int(dd))
 	var by_player := killer != null and killer.is_player
 	if S.b("dmgnums") and dd >= 4.0 and (by_player or s.is_player):
 		var tc := Color(1.0, 0.5, 0.4) if s.is_player else Color(1.0, 0.95, 0.6)
@@ -2599,9 +2638,12 @@ func _damage(s: Ship, dmg: float, killer: Ship) -> void:
 
 func _kill(victim: Ship, killer: Ship) -> void:
 	victim.alive = false
-	victim.respawn = 4.0
 	victim.speed = 0.0
-	victim.sink_t = 2.0
+	var vlen := _len(victim)
+	victim.sink_max = 2.0 if vlen < 90.0 else minf(16.0, 9.0 + float(victim.tier) * 1.6)
+	victim.sink_list = 0.5 if rng.randf() < 0.5 else -0.5
+	victim.sink_t = victim.sink_max
+	victim.respawn = victim.sink_max + 2.5
 	victim.target = null
 	var big := _len(victim)
 	_add_fx(0, victim.pos, big * 0.9, 0.9)
@@ -2616,7 +2658,13 @@ func _kill(victim: Ship, killer: Ship) -> void:
 			killer.hp = minf(killer.max_hp, killer.hp + killer.max_hp * 0.08)
 			killer.kills += 1
 			if killer.is_player:
-				S.d["xp"] = int(S.d.get("xp", 0)) + 25 + victim.tier * 15
+				var xpg := 25 + victim.tier * 15
+				S.d["xp"] = int(S.d.get("xp", 0)) + xpg
+				_mission_bump("xp", xpg)
+				_gain_bp(xpg)
+				battle_kills += 1
+				S.d["kills"] = int(S.d.get("kills", 0)) + 1
+				_mission_bump("kills", 1)
 				if S.b("ranked_mode"):
 					S.d["rp"] = maxi(0, int(S.d.get("rp", 0)) + 12 + victim.tier * 3)
 				settings_dirty = true
@@ -2681,6 +2729,8 @@ func _check_promotion(s: Ship) -> void:
 		return
 	var nt := s.tier + 1
 	if s.is_player:
+		battle_promos += 1
+		_mission_bump("promo", 1)
 		if not promo_open:
 			promo_open = true
 			ui.show_levelup(nt, D.of_tier(nt))
@@ -2691,6 +2741,106 @@ func _check_promotion(s: Ship) -> void:
 		var def: Dictionary = opts[rng.randi() % opts.size()]
 		_apply_def(s, def, maxf(s.hp / s.max_hp, 0.6))
 		_add_fx(3, s.pos, s.hl * 1.6, 0.6, Color(0.5, 0.85, 1.0))
+
+func _player_paint() -> Color:
+	var pk := str(S.d.get("paint", "navy"))
+	if D.PAINTS.has(pk):
+		return D.PAINTS[pk]["c"]
+	return Color(0.30, 0.65, 1.0)
+
+func _gain_bp(xp_amount: int) -> void:
+	S.d["bp"] = int(S.d.get("bp", 0)) + maxi(1, xp_amount / 25)
+
+func _mission_bump(key: String, amt: int) -> void:
+	_ensure_missions()
+	var k := "m_" + key
+	S.d[k] = int(S.d.get(k, 0)) + amt
+	settings_dirty = true
+
+func _mission_day() -> int:
+	return int(Time.get_unix_time_from_system() / 86400.0)
+
+func _ensure_missions() -> void:
+	var day := _mission_day()
+	if int(S.d.get("m_day", 0)) != day:
+		S.d["m_day"] = day
+		S.d["m_gift"] = 0
+		S.d["m_kills"] = 0
+		S.d["m_dmg"] = 0
+		S.d["m_xp"] = 0
+		S.d["m_crates"] = 0
+		settings_dirty = true
+
+func get_missions() -> Array:
+	_ensure_missions()
+	var day := _mission_day()
+	var out: Array = []
+	for i in 3:
+		var mi := (day * 7 + i * 2) % D.BP_MISSIONS.size()
+		var m: Dictionary = D.BP_MISSIONS[mi]
+		var diff := mini(2, (day + i) % 3)
+		var tgt := int(m["t"][diff])
+		var bit := 1 << (diff * 4 + i)
+		var have := int(S.d.get("m_" + str(m["k"]), 0))
+		out.append({"n": str(m["n"]) % tgt, "k": str(m["k"]), "have": have, "need": tgt, "reward": int(m["r"]), "done": have >= tgt, "claimed": (int(S.d.get("m_gift", 0)) & bit) != 0, "slot_bit": bit})
+	return out
+
+func claim_mission(slot_bit: int, reward: int) -> void:
+	if (int(S.d.get("m_gift", 0)) & slot_bit) != 0:
+		return
+	S.d["m_gift"] = int(S.d.get("m_gift", 0)) | slot_bit
+	S.d["bp"] = int(S.d.get("bp", 0)) + reward
+	settings_dirty = true
+	audio.play_ui("pickup", -4.0)
+
+func request_exit() -> void:
+	in_battle = false
+	ui.in_battle = false
+	if state == State.MENU:
+		return
+	var xpn := int(S.d.get("xp", 0))
+	var rpn := int(S.d.get("rp", 0))
+	var bpn := int(S.d.get("bp", 0))
+	var meta1 := D.level_progress(xpn)
+	var res := {
+		"kills": battle_kills,
+		"dmg": int(battle_dmg),
+		"score": int(player.score),
+		"time": int(battle_time),
+		"xp0": battle_xp0, "xp1": xpn,
+		"rp0": battle_rp0, "rp1": rpn,
+		"bp0": battle_bp0, "bp": maxi(0, bpn - battle_bp0),
+		"lvl0": int(D.level_progress(battle_xp0)["lvl"]), "lvl1": int(meta1["lvl"]),
+		"xp_have": int(meta1["have"]), "xp_need": int(meta1["need"]),
+		"ri0": D.rank_i_from_rp(battle_rp0), "ri1": D.rank_i_from_rp(rpn),
+		"ranked": S.b("ranked_mode"),
+		"promos": battle_promos,
+	}
+	S.d["best"] = maxi(int(S.d.get("best", 0)), int(player.score))
+	if player.alive:
+		player.alive = false
+		player.sink_t = 0.0
+		player.respawn = 0.0
+		if player.air != null:
+			player.air.alive = false
+			if player.air.node != null:
+				player.air.node.visible = false
+			if player.air.shadow != null:
+				player.air.shadow.visible = false
+		for a2 in player.wing:
+			a2.alive = false
+			if a2.node != null:
+				a2.node.visible = false
+	promo_open = false
+	death_pending = false
+	ctrl_air = false
+	state = State.MENU
+	audio.set_engine(false, 0.0)
+	audio.set_rotor(false, 0.0)
+	S.season_check()
+	S.store_account()
+	S.save_file()
+	ui.show_battle_results(res)
 
 func _damage_air(a: Air, dmg: float, attacker = null) -> void:
 	if not a.alive:
@@ -2743,6 +2893,8 @@ func _step_ship(s: Ship, dt: float) -> void:
 	var target_speed := s.throttle * float(d["spd"]) * (1.45 if boost else 1.0)
 	if s.flood_t > 0.0:
 		target_speed *= 0.7
+	if s.dive_t > 0.0:
+		target_speed *= 1.25
 	var gkey := Vector2i(floori(s.pos.x / GRID), floori(s.pos.y / GRID))
 	if reef_grid.has(gkey):
 		for i in reef_grid[gkey]:
@@ -2755,7 +2907,7 @@ func _step_ship(s: Ship, dt: float) -> void:
 	s.vel = Vector2.from_angle(s.angle) * s.speed
 	s.pos += s.vel * dt
 	if s.dive_t > 0.0:
-		s.throttle = clampf(s.throttle, -0.4, 0.4)
+		s.throttle = clampf(s.throttle, -0.7, 0.7)
 		# periscope wake + escaping air bubbles while running submerged
 		if fmod(time, 0.55) < dt:
 			_add_fx(3, s.pos + Vector2(rng.randf_range(-14.0, 14.0), rng.randf_range(-14.0, 14.0)), 7.0, 0.5, Color(0.8, 0.95, 1.0, 0.7))
@@ -3429,6 +3581,7 @@ func _step_crates(dt: float) -> void:
 					_add_fx(3, cc.pos, 16.0, 0.35, CRATE_COLORS[cc.kind])
 					if s.is_player:
 						audio.play_ui("pickup", -8.0)
+						_mission_bump("crates", 1)
 					lst.erase(cc)
 					if cc.temp:
 						crates.erase(cc)
@@ -3474,6 +3627,14 @@ func _step_fx(dt: float) -> void:
 
 # ---------------- Frame update ----------------
 
+var in_battle := false
+var battle_xp0 := 0
+var battle_rp0 := 0
+var battle_bp0 := 0
+var battle_kills := 0
+var battle_dmg := 0.0
+var battle_time := 0.0
+var battle_promos := 0
 var settings_dirty := false
 var save_timer := 0.0
 
@@ -3523,6 +3684,14 @@ func _process(delta: float) -> void:
 		else:
 			if s.sink_t > 0.0:
 				s.sink_t -= dt
+				if s.sink_max > 4.0:
+					if fmod(time, 0.5) < dt:
+						var fp := s.pos + Vector2.from_angle(s.angle + s.sink_list * (1.0 - s.sink_t / s.sink_max)) * rng.randf_range(-_len(s) * 0.35, _len(s) * 0.35)
+						_add_fx(0, fp, _len(s) * 0.35, 0.8)
+						_add_fx(4, fp, _len(s) * 0.55, 1.8, Color(0.16, 0.16, 0.16))
+				if s.sink_t <= 0.0 and s.sink_max > 4.0:
+					_add_fx(8, s.pos, _len(s) * 1.3, 1.4)
+					audio.play("sink", s.pos, -2.0)
 			if not s.is_player:
 				s.respawn -= dt
 				if s.respawn <= 0.0 and world_ready:
@@ -3559,6 +3728,8 @@ func _process(delta: float) -> void:
 	_update_hud(dt)
 	_pt("hud", t0)
 	_adapt_quality(dt)
+	if state == State.PLAYING and player.alive:
+		battle_time += dt
 	prof["frame"] = lerpf(float(prof.get("frame", delta * 1000.0)), delta * 1000.0, 0.1)
 	if settings_dirty:
 		save_timer -= dt
@@ -3646,9 +3817,12 @@ func _update_visuals(dt: float) -> void:
 		s.shadow.rotation = s.angle
 		var sp_ratio := clampf(absf(s.speed) / float(s.def["spd"]), 0.0, 1.0)
 		if sinking:
-			var k := clampf(s.sink_t / 2.0, 0.0, 1.0)
+			var k := clampf(s.sink_t / s.sink_max, 0.0, 1.0)
 			s.node.modulate = Color(k, k, k, k)
 			s.node.scale = Vector2.ONE * (0.85 + 0.15 * k)
+			s.body.rotation = s.angle + s.sink_list * (1.0 - k) * 0.6
+			if k < 0.5 and fmod(time, 0.35) < dt:
+				_add_fx(8, s.pos + Vector2.from_angle(rng.randf() * TAU) * _len(s) * rng.randf_range(0.1, 0.45), 14.0, 0.8)
 			s.tag.visible = false
 			continue
 		var show_tag := on and s.seen and (names or bars)

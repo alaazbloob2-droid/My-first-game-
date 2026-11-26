@@ -11,6 +11,7 @@ signal setting_changed(key: String)
 signal exit_requested
 signal host_requested
 signal join_requested(ip: String)
+signal match_picked(ip: String)
 
 const D := preload("res://data.gd")
 const SettingsScript := preload("res://settings.gd")
@@ -48,6 +49,12 @@ var loading := 0.0
 var join_root: Control
 var join_ip_edit: LineEdit
 var join_err: Label
+var match_list: VBoxContainer
+var match_msg: Label
+var match_rows: Array = []
+var host_addr_lbl: Label
+var leave_btn: Button
+var login_nick: LineEdit
 
 var lbl_class: Label
 var lbl_level: Label
@@ -141,13 +148,17 @@ var exit_btn: Button
 func setup(settings: SettingsScript) -> void:
 	S = settings
 	layer = 10
+	var full := Control.new()
+	full.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	full.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(full)
+	full.resized.connect(_apply_ui_scale)
 	root = Control.new()
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var th := Theme.new()
 	th.default_font_size = 14
 	root.theme = th
-	add_child(root)
-	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	full.add_child(root)
 	_build_hud()
 	_build_menu()
 	_build_levelup()
@@ -174,6 +185,18 @@ func setup(settings: SettingsScript) -> void:
 	root.add_child(lowhp_rect)
 	lowhp_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	warn_lbl.visible = false
+	_apply_ui_scale()
+
+func _apply_ui_scale() -> void:
+	if root == null or root.get_parent() == null:
+		return
+	var vs: Vector2 = root.get_parent().size
+	if vs.y <= 1.0:
+		return
+	var sc := clampf(S.f("ui_scale"), 0.6, 2.5) * clampf(vs.y / 720.0, 0.75, 2.2)
+	root.scale = Vector2(sc, sc)
+	root.size = vs / sc
+	root.position = Vector2.ZERO
 
 func _process(dt: float) -> void:
 	if feed.is_empty():
@@ -371,6 +394,11 @@ func _build_hud() -> void:
 	root.add_child(hud_root)
 	hud_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	leave_btn = _make_button(hud_root, "LEAVE BATTLE", 13, Vector2(150, 32), Color(0.62, 0.28, 0.18))
+	_rect(leave_btn, 0.5, 0, 0.5, 0, -78, 10, 78, 42)
+	leave_btn.visible = false
+	leave_btn.pressed.connect(_exit_battle)
 
 	# --- status panel (top-left)
 	var st := _panel(hud_root)
@@ -1054,10 +1082,20 @@ func _page_home() -> Control:
 	host_btn.pressed.connect(func():
 		audio_click()
 		host_requested.emit())
-	var join_btn := _make_button(net_row, "JOIN FRIEND (IP)", 16, Vector2(300, 42), Color(0.45, 0.33, 0.12))
+	var join_btn := _make_button(net_row, "JOIN MATCH", 16, Vector2(300, 42), Color(0.45, 0.33, 0.12))
 	join_btn.pressed.connect(func():
 		audio_click()
 		_open_join())
+	var addr_row := HBoxContainer.new()
+	addr_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	addr_row.add_theme_constant_override("separation", 8)
+	v.add_child(addr_row)
+	host_addr_lbl = _label(addr_row, "", 13, Color(0.6, 1.0, 0.85))
+	var copyb := _make_button(addr_row, "COPY", 12, Vector2(70, 30), Color(0.2, 0.3, 0.45))
+	copyb.pressed.connect(func():
+		audio_click()
+		DisplayServer.clipboard_set(host_addr_lbl.text)
+		toast("Address copied - send it to your friend"))
 	profile_lbl = _label(v, "", 14, TEXT)
 	profile_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	rank_lbl = _label(v, "", 15, WARN)
@@ -1163,7 +1201,7 @@ func _apply_nick() -> void:
 	var n := str(name_edit.text).strip_edges()
 	if n.is_empty():
 		return
-	if not D.nick_ok(n):
+	if not _nick_strict(n):
 		if prof_d.has("msg"):
 			(prof_d["msg"] as Label).text = "That nickname is not allowed."
 		return
@@ -1614,10 +1652,30 @@ func _build_login() -> void:
 	big_logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	big_logo.draw.connect(_draw_big_logo.bind(big_logo))
 	v.add_child(big_logo)
-	_label(v, "ENTER YOUR PASSWORD TO SET SAIL", 16, Color(0.86, 0.69, 0.22)).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var note := _label(v, "Any password creates its own account and keeps your ships, level, rank and battle pass. Same password, same fleet - every download.", 13, TEXT_DIM)
+	_label(v, "WELCOME ABOARD, CAPTAIN", 18, Color(0.86, 0.69, 0.22)).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var note := _label(v, "CREATE ACCOUNT the first time (pick a name + password). Same password and name = same fleet, level, rank and battle pass on every device and download.", 13, TEXT_DIM)
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	note.custom_minimum_size = Vector2(420, 0)
+	login_nick = LineEdit.new()
+	login_nick.placeholder_text = "Nickname  (only needed when creating an account)"
+	login_nick.max_length = 14
+	login_nick.custom_minimum_size = Vector2(0, 44)
+	login_nick.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	login_nick.add_theme_font_size_override("font_size", 16)
+	var lne := StyleBoxFlat.new()
+	lne.bg_color = Color(0, 0, 0, 0.4)
+	lne.set_corner_radius_all(10)
+	lne.set_content_margin_all(8)
+	lne.border_color = Color(1, 1, 1, 0.15)
+	lne.set_border_width_all(1)
+	var lnf := lne.duplicate() as StyleBoxFlat
+	lnf.border_color = Color(0.30, 0.65, 1.0)
+	lnf.set_border_width_all(2)
+	login_nick.add_theme_stylebox_override("normal", lne)
+	login_nick.add_theme_stylebox_override("focus", lnf)
+	login_nick.add_theme_color_override("font_color", Color.WHITE)
+	login_nick.add_theme_color_override("font_placeholder_color", Color(1, 1, 1, 0.4))
+	v.add_child(login_nick)
 	login_pin = LineEdit.new()
 	login_pin.secret = true
 	login_pin.secret_character = "x"
@@ -1644,12 +1702,14 @@ func _build_login() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	v.add_child(row)
-	var go := _make_button(row, "SET SAIL", 18, Vector2(0, 50))
-	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var mk := _make_button(row, "CREATE ACCOUNT", 15, Vector2(0, 50), Color(0.10, 0.44, 0.30))
+	mk.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mk.pressed.connect(_create_confirm)
+	var go := _make_button(row, "LOG IN", 15, Vector2(120, 50))
 	go.pressed.connect(_login_confirm)
-	var guest := _make_button(row, "GUEST", 14, Vector2(110, 50), Color(0.3, 0.34, 0.4))
+	var guest := _make_button(row, "GUEST", 14, Vector2(90, 50), Color(0.3, 0.34, 0.4))
 	guest.pressed.connect(_login_guest)
-	var hint2 := _label(v, "Passwords are case sensitive. Pick something you will remember - it IS your account.", 11, TEXT_DIM)
+	var hint2 := _label(v, "Passwords are case sensitive. Forgetting it means a new empty fleet - there is no recovery, this game has no servers.", 11, TEXT_DIM)
 	hint2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint2.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint2.custom_minimum_size = Vector2(420, 0)
@@ -1703,7 +1763,14 @@ func _build_join() -> void:
 	go.pressed.connect(_join_confirm)
 	var cancel := _make_button(row, "CANCEL", 14, Vector2(110, 50), Color(0.3, 0.34, 0.4))
 	cancel.pressed.connect(_join_cancel)
-	var hint := _label(v, "Same wifi? Ask the host for their LAN address (shown when they host). Port is 7070 UDP.", 11, TEXT_DIM)
+	var mlbl := _label(v, "MATCHES FOUND ON THIS NETWORK", 13, Color(0.86, 0.69, 0.22))
+	v.add_child(mlbl)
+	match_msg = _label(v, "Searching for nearby matches...", 12, TEXT_DIM)
+	v.add_child(match_msg)
+	match_list = VBoxContainer.new()
+	match_list.add_theme_constant_override("separation", 6)
+	v.add_child(match_list)
+	var hint := _label(v, "Strangers on the same wifi appear here automatically. Someone on another internet connection? The host Copies their address (shown after hosting) and sends it to you - the game has no master server, so across the internet the address is how you find each other.", 11, TEXT_DIM)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.custom_minimum_size = Vector2(460, 0)
@@ -1713,7 +1780,34 @@ func _open_join() -> void:
 		return
 	join_ip_edit.text = ""
 	join_err.text = ""
+	match_msg.text = "Searching for nearby matches..."
+	for r in match_rows:
+		(r as Control).queue_free()
+	match_rows.clear()
 	join_root.visible = true
+
+func set_host_addr(addr: String) -> void:
+	if host_addr_lbl != null:
+		host_addr_lbl.text = addr
+
+func set_matches(ms: Array) -> void:
+	if match_list == null or not join_root.visible:
+		return
+	for r in match_rows:
+		(r as Control).queue_free()
+	match_rows.clear()
+	if ms.is_empty():
+		match_msg.text = "No matches on this network yet - keep this open while the host starts one."
+		return
+	match_msg.text = "%d match(es) found - click to join:" % ms.size()
+	for m in ms:
+		var txt := "%s  -  %s" % [str(m[1]), str(m[0])]
+		var b := _make_button(match_list, txt, 13, Vector2(460, 34), Color(0.16, 0.40, 0.30))
+		b.pressed.connect(func():
+			audio_click()
+			join_ip_edit.text = str(m[0])
+			_join_confirm())
+		match_rows.append(b)
 
 func _join_cancel() -> void:
 	if join_root != null:
@@ -1730,21 +1824,53 @@ func _join_confirm() -> void:
 	join_root.visible = false
 	join_requested.emit(ip)
 
+func _nick_strict(n: String) -> bool:
+	if not D.nick_ok(n):
+		return false
+	for bad in ["<", ">", "&", "/", "\\", "{", "}"]:
+		if n.contains(bad):
+			return false
+	return true
+
+func _create_confirm() -> void:
+	var nick := login_nick.text.strip_edges()
+	var pin := login_pin.text.strip_edges()
+	if nick.is_empty():
+		login_err.text = "Pick a nickname first."
+		return
+	if not _nick_strict(nick) or nick.length() < 3:
+		login_err.text = "That nickname is not allowed (3-14 letters, nothing rude)."
+		return
+	if pin.length() < 4:
+		login_err.text = "Password needs at least 4 characters."
+		return
+	var r := S.create_account(pin, nick)
+	if r == 1:
+		login_err.text = "That password is already used. Use LOG IN."
+		return
+	if r != 0:
+		login_err.text = "Could not create the account. Try again."
+		return
+	_after_login(nick)
+
 func _login_confirm() -> void:
 	var pin := login_pin.text.strip_edges()
 	if pin.is_empty():
 		login_err.text = "Type a password first."
 		return
 	if S.load_account(pin):
-		login_root.visible = false
-		guest_mode = false
-		name_edit.text = str(S.d.get("nick", "Captain"))
-		_refresh_menu_meta()
-		_fill_progress()
-		_fill_profile()
-		toast("Welcome back, %s" % str(S.d.get("nick", "Captain")))
+		_after_login(str(S.d.get("nick", "Captain")))
 	else:
-		login_err.text = "Could not create that account. Try another password."
+		login_err.text = "No account with that password. Create one first." if S.login_missing else "Login failed."
+
+func _after_login(nname: String) -> void:
+	login_root.visible = false
+	guest_mode = false
+	name_edit.text = str(S.d.get("nick", "Captain"))
+	_refresh_menu_meta()
+	_fill_progress()
+	_fill_profile()
+	toast("Welcome to the fleet, %s" % nname)
 
 func _login_guest() -> void:
 	guest_mode = true
@@ -1943,6 +2069,8 @@ func _make_settings_tabs() -> TabContainer:
 	_s_check(g, "V-Sync", "vsync")
 	_s_check(g, "Fullscreen", "fullscreen")
 	_s_check(g, "Show FPS counter", "show_fps")
+	_s_slider(g, "Menu / HUD size", "ui_scale", 0.7, 1.8, 0.1, false)
+	set_ctrls["ui_scale"]["c"].value_changed.connect(func(_v: float): _apply_ui_scale())
 
 	var p2 := _tab(tabs, "Gameplay")
 	_s_slider(p2, "Number of AI ships", "bots", 4.0, 50.0, 1.0, false)
@@ -2117,6 +2245,8 @@ func close_settings() -> void:
 func show_menu() -> void:
 	menu_root.visible = true
 	hud_root.visible = false
+	if leave_btn != null:
+		leave_btn.visible = false
 	respawn_root.visible = false
 	levelup_root.visible = false
 	promo_banner.visible = false
@@ -2136,6 +2266,7 @@ func show_game() -> void:
 	menu_root.visible = false
 	hud_root.visible = true
 	respawn_root.visible = false
+	leave_btn.visible = in_battle
 
 func set_fps_visible(v: bool) -> void:
 	lbl_fps.visible = v

@@ -346,6 +346,10 @@ var net_snap_acc := 0.0
 var net_crates_acc := 0.0
 var net_ev_shots: Array = []
 var net_ev_fx: Array = []
+var net_beacon: PacketPeerUDP = null
+var net_beacon_acc := 0.0
+var net_listen: PacketPeerUDP = null
+var net_matches: Dictionary = {}
 var bake_gen := 0
 var wgen := RandomNumberGenerator.new()
 var water_mat: ShaderMaterial
@@ -469,6 +473,7 @@ func _setup_ui() -> void:
 	ui.play_pressed.connect(_on_play)
 	ui.host_requested.connect(_net_host)
 	ui.join_requested.connect(_net_client)
+	ui.match_picked.connect(_net_client)
 	ui.ship_picked.connect(_on_ship_picked)
 	ui.slot_clicked.connect(_select_weapon)
 	ui.ability_clicked.connect(_use_ability_player)
@@ -3735,6 +3740,7 @@ func _process(delta: float) -> void:
 	time += dt
 	vp_size = get_viewport_rect().size
 	_net_poll()
+	_net_match_listen(dt)
 	if net_mode == 1:
 		_net_host_apply(dt)
 	if net_mode == 2:
@@ -3837,6 +3843,7 @@ func _process(delta: float) -> void:
 		battle_time += dt
 	if net_mode == 1:
 		_net_host_frame(dt)
+		_net_beacon(dt)
 	prof["frame"] = lerpf(float(prof.get("frame", delta * 1000.0)), delta * 1000.0, 0.1)
 	if settings_dirty:
 		save_timer -= dt
@@ -4970,6 +4977,13 @@ func _net_pend(pid: int, k: int, v: float) -> void:
 
 func _net_shutdown() -> void:
 	net_mode = 0
+	if net_beacon != null:
+		net_beacon.close()
+		net_beacon = null
+	if net_listen != null:
+		net_listen.close()
+		net_listen = null
+	net_matches.clear()
 	net_hello_sent = false
 	net_started = false
 	net_world_ready = false
@@ -4997,9 +5011,16 @@ func _net_host() -> void:
 	var res: Array = NetScript.setup_upnp()
 	if bool(res[0]):
 		net_ip_hint = str(res[1])
-		ui.toast("Hosting! Friend picks JOIN and types: %s:%d" % [str(res[1]), NetScript.PORT])
+		ui.set_host_addr("%s:%d" % [net_ip_hint, NetScript.PORT])
+		ui.toast("Hosting! Friend picks JOIN and types: %s:%d" % [net_ip_hint, NetScript.PORT])
 	else:
-		ui.toast("Local match up - friends on YOUR wifi can join %s" % _local_ip_hint())
+		var lan := _local_ip_hint()
+		if lan.begins_with("local port"):
+			ui.set_host_addr(lan)
+			ui.toast("Match up on the local network - others find it in the match list.")
+		else:
+			ui.set_host_addr("%s:%d" % [lan, NetScript.PORT])
+			ui.toast("Local match up - friends on YOUR wifi can join %s" % lan)
 		ui.toast("Internet join needs port %d UDP open (UPnP said: %s)." % [NetScript.PORT, str(res[2])])
 	var peer := ENetMultiplayerPeer.new()
 	var err: int = peer.create_server(NetScript.PORT, 4)
@@ -5010,6 +5031,9 @@ func _net_host() -> void:
 		return
 	net_mode = 1
 	net_peer = peer
+	net_beacon = PacketPeerUDP.new()
+	net_beacon.set_broadcast_enabled(true)
+	net_beacon_acc = 1.0
 	var nick := str(S.d.get("nick", "Admiral"))
 	if not D.nick_ok(nick):
 		nick = "Admiral"
@@ -5677,3 +5701,47 @@ func _net_crates_apply(list: Array) -> void:
 
 func _net_bcast(msg: Array) -> void:
 	_net_put(msg)
+
+func _net_beacon(dt: float) -> void:
+	if net_beacon == null or net_mode != 1:
+		return
+	net_beacon_acc += dt
+	if net_beacon_acc < 0.8:
+		return
+	net_beacon_acc = 0.0
+	var nick := str(S.d.get("nick", "Battle"))
+	if not D.nick_ok(nick):
+		nick = "Battle"
+	var npl := net_ships.size() + 1
+	net_beacon.set_dest_address("255.255.255.255", NetScript.DIS_PORT)
+	net_beacon.put_var([NetScript.DIS_TAG, "%s's battle (%d)" % [nick, npl], npl])
+	net_beacon.set_dest_address("127.0.0.1", NetScript.DIS_PORT)
+	net_beacon.put_var([NetScript.DIS_TAG, "%s's battle (%d)" % [nick, npl], npl])
+
+func _net_match_listen(_dt: float) -> void:
+	if net_mode != 0 or ui == null or ui.join_root == null or not ui.join_root.visible:
+		if net_listen != null:
+			net_listen.close()
+			net_listen = null
+		return
+	if net_listen == null:
+		net_listen = PacketPeerUDP.new()
+		if net_listen.bind(NetScript.DIS_PORT) != OK:
+			net_listen.close()
+			net_listen = null
+			return
+	while net_listen.get_available_packet_count() > 0:
+		var v: Variant = net_listen.get_var()
+		var ip := net_listen.get_packet_ip()
+		if v is Array and (v as Array).size() >= 3 and str((v as Array)[0]) == NetScript.DIS_TAG:
+			net_matches[ip] = [str((v as Array)[1]), int((v as Array)[2]), time]
+	var stale: Array = []
+	for ip in net_matches.keys():
+		if time - float(net_matches[ip][2]) > 3.5:
+			stale.append(ip)
+	for ip in stale:
+		net_matches.erase(ip)
+	var list: Array = []
+	for ip in net_matches.keys():
+		list.append([ip, str(net_matches[ip][0]), int(net_matches[ip][1])])
+	ui.set_matches(list)

@@ -12,6 +12,12 @@
 # host and the friend build the world from the same seed.
 
 const PORT := 7070
+const DIS_PORT := 7071
+const DIS_TAG := "NAVALIO"
+
+# LAN match discovery: the host broadcasts a tiny beacon every second on the
+# local network; the join screen listens on DIS_PORT and lists live matches so
+# players on the same wifi never have to type an address.
 
 # client -> host
 const M_HELLO := 10   # [nick, paint_kind]

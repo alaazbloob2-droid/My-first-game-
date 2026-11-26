@@ -25,6 +25,70 @@ const RANKS := [
 	[2800, "Diamond"], [4200, "Master"], [6000, "Elite"], [8500, "Legend"], [12000, "PLUTONIUM"],
 ]
 
+const RANK_META := [
+	{"sh": 0, "col": Color(0.62, 0.66, 0.70), "pips": 0},
+	{"sh": 1, "col": Color(0.80, 0.56, 0.30), "pips": 1},
+	{"sh": 1, "col": Color(0.74, 0.76, 0.80), "pips": 2},
+	{"sh": 1, "col": Color(0.96, 0.81, 0.20), "pips": 3},
+	{"sh": 2, "col": Color(0.55, 0.82, 0.96), "pips": 2},
+	{"sh": 2, "col": Color(0.44, 0.72, 0.99), "pips": 3},
+	{"sh": 3, "col": Color(0.58, 0.56, 0.99), "pips": 3},
+	{"sh": 3, "col": Color(0.80, 0.50, 0.96), "pips": 4},
+	{"sh": 4, "col": Color(0.96, 0.36, 0.36), "pips": 4},
+	{"sh": 5, "col": Color(0.12, 0.98, 0.46), "pips": 0},
+]
+
+static func rank_i_from_rp(rp: int) -> int:
+	var idx := 0
+	for r in RANKS.size():
+		if rp >= int(RANKS[r][0]):
+			idx = r
+	return idx
+
+const PAINTS := {
+	"navy": {"n": "Navy Blue", "c": Color(0.30, 0.45, 0.65)},
+	"arctic": {"n": "Arctic", "c": Color(0.82, 0.87, 0.91)},
+	"jungle": {"n": "Jungle", "c": Color(0.31, 0.45, 0.30)},
+	"desert": {"n": "Desert", "c": Color(0.72, 0.60, 0.42)},
+	"crimson": {"n": "Crimson", "c": Color(0.62, 0.17, 0.14)},
+	"gold": {"n": "Emperor Gold", "c": Color(0.86, 0.69, 0.22)},
+	"stealth": {"n": "Stealth", "c": Color(0.13, 0.15, 0.17)},
+	"radiation": {"n": "Radioactive", "c": Color(0.22, 0.82, 0.32)},
+}
+
+const BP_TIER_COST := 120
+const BP_REWARDS := [
+	{"k": "xp", "v": 250, "n": "+250 XP"},
+	{"k": "paint", "v": "arctic", "n": "Paint: Arctic"},
+	{"k": "rp", "v": 60, "n": "+60 Ranked Rating"},
+	{"k": "xp", "v": 400, "n": "+400 XP"},
+	{"k": "paint", "v": "jungle", "n": "Paint: Jungle"},
+	{"k": "xp", "v": 500, "n": "+500 XP"},
+	{"k": "paint", "v": "desert", "n": "Paint: Desert"},
+	{"k": "rp", "v": 80, "n": "+80 Ranked Rating"},
+	{"k": "xp", "v": 650, "n": "+650 XP"},
+	{"k": "paint", "v": "crimson", "n": "Paint: Crimson"},
+	{"k": "xp", "v": 800, "n": "+800 XP"},
+	{"k": "paint", "v": "gold", "n": "Paint: Emperor Gold"},
+	{"k": "xp", "v": 1000, "n": "+1000 XP"},
+	{"k": "rp", "v": 100, "n": "+100 Ranked Rating"},
+	{"k": "xp", "v": 1250, "n": "+1250 XP"},
+	{"k": "paint", "v": "stealth", "n": "Paint: Stealth"},
+	{"k": "xp", "v": 1500, "n": "+1500 XP"},
+	{"k": "rp", "v": 150, "n": "+150 Ranked Rating"},
+	{"k": "xp", "v": 2000, "n": "+2000 XP"},
+	{"k": "paint", "v": "radiation", "n": "Paint: Radioactive"},
+]
+
+const BP_MISSIONS := [
+	{"n": "Sink %d ships", "k": "kills", "t": [2, 4, 6], "r": 40},
+	{"n": "Collect %d supply crates", "k": "crates", "t": [12, 20, 30], "r": 30},
+	{"n": "Deal %d damage", "k": "dmg", "t": [3000, 6000, 9000], "r": 40},
+	{"n": "Earn %d XP", "k": "xp", "t": [400, 700, 1000], "r": 30},
+	{"n": "Promote %d time in battle", "k": "promo", "t": [1, 1, 2], "r": 50},
+]
+
+
 static func level_from_xp(xp: int) -> int:
 	var lvl := 1
 	var cost := 250
@@ -101,14 +165,14 @@ const WEAPONS := {
 	"ssm_l": {"n": "Sea-Skimmer Anti-Ship Missile", "vis": "can", "pk": "missile", "dmg": 170.0, "spd": 420.0, "rl": 16.0, "gap": 1.5, "spr": 0.02, "trav": 1.5, "mode": 2, "turn": 2.3, "seek": 900.0, "spl": 26.0, "snd": "missile", "ic": "missile", "mt": 2, "rng": 2300.0},
 	"ssm_h": {"n": "Heavy Supersonic Missile", "vis": "can", "pk": "missile", "dmg": 430.0, "spd": 520.0, "rl": 24.0, "gap": 2.0, "spr": 0.02, "trav": 1.5, "mode": 2, "turn": 1.7, "seek": 1200.0, "spl": 44.0, "snd": "missile", "ic": "missile_h", "mt": 3, "rng": 3200.0},
 	"cruise": {"n": "Long-Range Cruise Missile", "vis": "vls", "pk": "missile", "dmg": 230.0, "spd": 430.0, "rl": 20.0, "gap": 1.5, "spr": 0.0, "trav": 1.0, "mode": 2, "turn": 3.0, "spl": 34.0, "snd": "missile", "ic": "cruise", "seek": 1500.0, "mt": 4, "rng": 4200.0},
-	"a_mg": {"n": "Door / Chain Gun", "vis": "gun", "pk": "bullet", "dmg": 6.0, "spd": 700.0, "rl": 0.16, "gap": 0.06, "spr": 0.06, "trav": 9.0, "bw": 0.8, "bl": 5.0, "snd": "mg", "ic": "bullet", "rng": 480.0},
-	"a_rocket": {"n": "Rocket Pod", "vis": "rack", "pk": "rocket", "dmg": 17.0, "sal": 6, "spd": 520.0, "rl": 8.0, "gap": 0.9, "spr": 0.1, "trav": 1.0, "mode": 0, "turn": 0.0, "spl": 16.0, "snd": "rocket", "ic": "rocket", "mt": 5, "rng": 700.0},
-	"a_torp": {"n": "Air-Dropped Torpedo", "vis": "tubes", "pk": "torp", "dmg": 170.0, "spd": 145.0, "rl": 14.0, "gap": 1.0, "spr": 0.0, "trav": 1.0, "mode": 2, "turn": 1.5, "seek": 260.0, "spl": 28.0, "snd": "torp", "ic": "torp", "tl": 9.0, "rng": 800.0},
-	"bomb_s": {"n": "Light Bombs", "vis": "rack", "pk": "bomb", "dmg": 70.0, "spd": 0.0, "rng": 0.0, "rl": 7.0, "gap": 0.5, "spr": 0.0, "trav": 1.0, "spl": 36.0, "snd": "bomb", "ic": "bomb"},
-	"bomb_l": {"n": "Heavy Bombs", "vis": "rack", "pk": "bomb", "dmg": 280.0, "spd": 0.0, "rng": 0.0, "rl": 12.0, "gap": 1.0, "spr": 0.0, "trav": 1.0, "spl": 54.0, "snd": "bomb", "ic": "bomb"},
-	"a_ms": {"n": "Light Air-Launched Missile", "vis": "can", "pk": "missile", "dmg": 130.0, "spd": 440.0, "rl": 9.0, "gap": 1.0, "spr": 0.02, "trav": 1.5, "mode": 2, "turn": 2.6, "seek": 800.0, "spl": 22.0, "snd": "missile", "ic": "missile_s", "mt": 7, "rng": 1700.0},
-	"a_ms_h": {"n": "Supersonic Air Missile", "vis": "can", "pk": "missile", "dmg": 340.0, "spd": 560.0, "rl": 16.0, "gap": 1.4, "spr": 0.02, "trav": 1.5, "mode": 2, "turn": 2.0, "seek": 1100.0, "spl": 40.0, "snd": "missile", "ic": "missile_h", "mt": 8, "rng": 2800.0},
-	"a_bomb_h": {"n": "Armor-Piercing Bomb", "vis": "rack", "pk": "bomb", "dmg": 430.0, "spd": 0.0, "rng": 0.0, "rl": 14.0, "gap": 1.2, "spr": 0.0, "trav": 1.0, "spl": 62.0, "snd": "bomb", "ic": "bomb"},
+	"a_mg": {"n": "Door / Chain Gun", "vis": "gun", "pk": "bullet", "dmg": 8.0, "spd": 700.0, "rl": 0.16, "gap": 0.06, "spr": 0.06, "trav": 9.0, "bw": 0.8, "bl": 5.0, "snd": "mg", "ic": "bullet", "rng": 480.0},
+	"a_rocket": {"n": "Rocket Pod", "vis": "rack", "pk": "rocket", "dmg": 21.0, "sal": 6, "spd": 520.0, "rl": 8.0, "gap": 0.9, "spr": 0.1, "trav": 1.0, "mode": 0, "turn": 0.0, "spl": 16.0, "snd": "rocket", "ic": "rocket", "mt": 5, "rng": 700.0},
+	"a_torp": {"n": "Air-Dropped Torpedo", "vis": "tubes", "pk": "torp", "dmg": 210.0, "spd": 145.0, "rl": 14.0, "gap": 1.0, "spr": 0.0, "trav": 1.0, "mode": 2, "turn": 1.5, "seek": 260.0, "spl": 28.0, "snd": "torp", "ic": "torp", "tl": 9.0, "rng": 800.0},
+	"bomb_s": {"n": "Light Bombs", "vis": "rack", "pk": "bomb", "dmg": 95.0, "spd": 0.0, "rng": 0.0, "rl": 7.0, "gap": 0.5, "spr": 0.0, "trav": 1.0, "spl": 36.0, "snd": "bomb", "ic": "bomb"},
+	"bomb_l": {"n": "Heavy Bombs", "vis": "rack", "pk": "bomb", "dmg": 320.0, "spd": 0.0, "rng": 0.0, "rl": 12.0, "gap": 1.0, "spr": 0.0, "trav": 1.0, "spl": 54.0, "snd": "bomb", "ic": "bomb"},
+	"a_ms": {"n": "Light Air-Launched Missile", "vis": "can", "pk": "missile", "dmg": 165.0, "spd": 440.0, "rl": 9.0, "gap": 1.0, "spr": 0.02, "trav": 1.5, "mode": 2, "turn": 2.6, "seek": 800.0, "spl": 22.0, "snd": "missile", "ic": "missile_s", "mt": 7, "rng": 1700.0},
+	"a_ms_h": {"n": "Supersonic Air Missile", "vis": "can", "pk": "missile", "dmg": 390.0, "spd": 560.0, "rl": 16.0, "gap": 1.4, "spr": 0.02, "trav": 1.5, "mode": 2, "turn": 2.0, "seek": 1100.0, "spl": 40.0, "snd": "missile", "ic": "missile_h", "mt": 8, "rng": 2800.0},
+	"a_bomb_h": {"n": "Armor-Piercing Bomb", "vis": "rack", "pk": "bomb", "dmg": 470.0, "spd": 0.0, "rng": 0.0, "rl": 14.0, "gap": 1.2, "spr": 0.0, "trav": 1.0, "spl": 62.0, "snd": "bomb", "ic": "bomb"},
 	"mark": {"n": "Target Designator", "vis": "rack", "pk": "bullet", "dmg": 0.0, "spd": 0.0, "rng": 700.0, "rl": 6.0, "gap": 0.2, "spr": 0.0, "trav": 1.0, "special": "mark", "snd": "ping", "ic": "mark"},
 }
 
@@ -119,18 +183,18 @@ const WEAPONS := {
 #  Carriers launch a whole squadron (ship key "squad") that flies as ONE formation.
 # ---------------------------------------------------------------------------------------
 const AIR := {
-	"uav": {"n": "Recon Drone", "kind": "plane", "hp": 40.0, "spd": 260.0, "turn": 3.2, "vis": 1500.0, "leash": 2000.0, "cd": 6.0, "cam": 0.8, "size": 0.7, "col": Color(0.82, 0.84, 0.86), "w": [["mark", 1]], "desc": "Long-range recon. Marks enemies (+25% damage taken)."},
-	"heli_scout": {"n": "Scout Helicopter", "kind": "heli", "hp": 70.0, "spd": 220.0, "turn": 2.8, "vis": 1250.0, "leash": 1500.0, "cd": 6.0, "cam": 0.85, "size": 1.0, "col": Color(0.70, 0.74, 0.78), "w": [["mark", 1], ["a_mg", 1]], "desc": "Hovering spotter. Marks enemies for your guns."},
-	"heli_asw": {"n": "ASW Helicopter", "kind": "heli", "hp": 95.0, "spd": 195.0, "turn": 2.6, "vis": 900.0, "leash": 1400.0, "cd": 7.0, "cam": 0.85, "size": 1.1, "col": Color(0.36, 0.40, 0.44), "w": [["a_torp", 2], ["a_mg", 1]], "desc": "Drops homing torpedoes and has a door gun."},
-	"heli_attack": {"n": "Attack Helicopter", "kind": "heli", "hp": 120.0, "spd": 210.0, "turn": 2.6, "vis": 800.0, "leash": 1500.0, "cd": 7.0, "cam": 0.85, "size": 1.2, "col": Color(0.22, 0.26, 0.22), "turret": true, "w": [["a_mg", 2], ["a_rocket", 1]], "desc": "Chain gun that follows the cursor, plus rocket pods."},
-	"heli_heavy": {"n": "Heavy Gunship", "kind": "heli", "hp": 170.0, "spd": 190.0, "turn": 2.4, "vis": 850.0, "leash": 1600.0, "cd": 8.0, "cam": 0.82, "size": 1.35, "col": Color(0.18, 0.20, 0.18), "turret": true, "w": [["a_rocket", 2], ["a_ms", 1], ["a_mg", 2]], "desc": "Twin rocket pods, a light anti-ship missile and twin chain guns."},
-	"floatplane": {"n": "Spotter Floatplane", "kind": "plane", "hp": 55.0, "spd": 280.0, "turn": 2.0, "vis": 1400.0, "leash": 2400.0, "cd": 6.0, "cam": 0.75, "size": 1.0, "col": Color(0.60, 0.64, 0.58), "w": [["mark", 1], ["bomb_s", 2]], "desc": "Fast scout. Marks targets and drops light bombs."},
-	"patrol_seaplane": {"n": "Patrol Seaplane", "kind": "plane", "hp": 110.0, "spd": 265.0, "turn": 1.8, "vis": 1500.0, "leash": 2600.0, "cd": 7.0, "cam": 0.75, "size": 1.5, "col": Color(0.55, 0.60, 0.55), "w": [["a_torp", 1], ["bomb_s", 2]], "desc": "Twin-engine flying boat with a torpedo and light bombs."},
-	"torp_bomber": {"n": "Torpedo Bomber", "kind": "plane", "hp": 100.0, "spd": 300.0, "turn": 1.9, "vis": 1000.0, "leash": 2600.0, "cd": 6.0, "cam": 0.74, "size": 1.4, "col": Color(0.35, 0.40, 0.38), "w": [["a_torp", 2]], "desc": "Drops a pair of homing torpedoes on the run-in."},
-	"dive_bomber": {"n": "Dive Bomber", "kind": "plane", "hp": 110.0, "spd": 320.0, "turn": 1.7, "vis": 1000.0, "leash": 2600.0, "cd": 6.0, "cam": 0.72, "size": 1.5, "col": Color(0.30, 0.34, 0.42), "w": [["bomb_l", 2], ["a_mg", 2]], "desc": "Heavy bombs and forward machine guns."},
-	"jet_strike": {"n": "Strike Jet", "kind": "plane", "hp": 160.0, "spd": 430.0, "turn": 2.2, "vis": 1100.0, "leash": 3000.0, "cd": 7.0, "cam": 0.68, "size": 1.5, "col": Color(0.42, 0.46, 0.50), "w": [["a_ms", 2], ["a_mg", 2]], "desc": "Fast carrier jet with a pair of anti-ship missiles and cannon."},
-	"jet_bomber": {"n": "Carrier Jet Bomber", "kind": "plane", "hp": 185.0, "spd": 410.0, "turn": 1.9, "vis": 1200.0, "leash": 3000.0, "cd": 8.0, "cam": 0.68, "size": 1.7, "col": Color(0.30, 0.33, 0.38), "w": [["bomb_l", 3]], "desc": "A rack of heavy bombs delivered at jet speed."},
-	"jet_heavy": {"n": "Heavy Strike Jet", "kind": "plane", "hp": 210.0, "spd": 450.0, "turn": 1.9, "vis": 1150.0, "leash": 3200.0, "cd": 8.0, "cam": 0.66, "size": 1.85, "col": Color(0.26, 0.29, 0.33), "w": [["a_ms_h", 1], ["a_rocket", 1], ["a_mg", 2]], "desc": "Big twin-engine strike jet: one supersonic missile, rockets and cannon."},
+	"uav": {"n": "Recon Drone", "kind": "plane", "hp": 60.0, "spd": 260.0, "turn": 3.2, "vis": 1500.0, "leash": 2000.0, "cd": 6.0, "cam": 0.8, "size": 0.7, "col": Color(0.82, 0.84, 0.86), "w": [["mark", 1]], "desc": "Long-range recon. Marks enemies (+25% damage taken)."},
+	"heli_scout": {"n": "Scout Helicopter", "kind": "heli", "hp": 95.0, "spd": 220.0, "turn": 2.8, "vis": 1250.0, "leash": 1500.0, "cd": 6.0, "cam": 0.85, "size": 1.0, "col": Color(0.70, 0.74, 0.78), "w": [["mark", 1], ["a_mg", 1]], "desc": "Hovering spotter. Marks enemies for your guns."},
+	"heli_asw": {"n": "ASW Helicopter", "kind": "heli", "hp": 130.0, "spd": 195.0, "turn": 2.6, "vis": 900.0, "leash": 1400.0, "cd": 7.0, "cam": 0.85, "size": 1.1, "col": Color(0.36, 0.40, 0.44), "w": [["a_torp", 2], ["a_mg", 1]], "desc": "Drops homing torpedoes and has a door gun."},
+	"heli_attack": {"n": "Attack Helicopter", "kind": "heli", "hp": 175.0, "spd": 210.0, "turn": 2.6, "vis": 800.0, "leash": 1500.0, "cd": 7.0, "cam": 0.85, "size": 1.2, "col": Color(0.22, 0.26, 0.22), "turret": true, "w": [["a_mg", 2], ["a_rocket", 1]], "desc": "Chain gun that follows the cursor, plus rocket pods."},
+	"heli_heavy": {"n": "Heavy Gunship", "kind": "heli", "hp": 235.0, "spd": 190.0, "turn": 2.4, "vis": 850.0, "leash": 1600.0, "cd": 8.0, "cam": 0.82, "size": 1.35, "col": Color(0.18, 0.20, 0.18), "turret": true, "w": [["a_rocket", 2], ["a_ms", 1], ["a_mg", 2]], "desc": "Twin rocket pods, a light anti-ship missile and twin chain guns."},
+	"floatplane": {"n": "Spotter Floatplane", "kind": "plane", "hp": 75.0, "spd": 280.0, "turn": 2.0, "vis": 1400.0, "leash": 2400.0, "cd": 6.0, "cam": 0.75, "size": 1.0, "col": Color(0.60, 0.64, 0.58), "w": [["mark", 1], ["bomb_s", 2]], "desc": "Fast scout. Marks targets and drops light bombs."},
+	"patrol_seaplane": {"n": "Patrol Seaplane", "kind": "plane", "hp": 150.0, "spd": 265.0, "turn": 1.8, "vis": 1500.0, "leash": 2600.0, "cd": 7.0, "cam": 0.75, "size": 1.5, "col": Color(0.55, 0.60, 0.55), "w": [["a_torp", 1], ["bomb_s", 2]], "desc": "Twin-engine flying boat with a torpedo and light bombs."},
+	"torp_bomber": {"n": "Torpedo Bomber", "kind": "plane", "hp": 145.0, "spd": 300.0, "turn": 1.9, "vis": 1000.0, "leash": 2600.0, "cd": 6.0, "cam": 0.74, "size": 1.4, "col": Color(0.35, 0.40, 0.38), "w": [["a_torp", 2]], "desc": "Drops a pair of homing torpedoes on the run-in."},
+	"dive_bomber": {"n": "Dive Bomber", "kind": "plane", "hp": 160.0, "spd": 320.0, "turn": 1.7, "vis": 1000.0, "leash": 2600.0, "cd": 6.0, "cam": 0.72, "size": 1.5, "col": Color(0.30, 0.34, 0.42), "w": [["bomb_l", 2], ["a_mg", 2]], "desc": "Heavy bombs and forward machine guns."},
+	"jet_strike": {"n": "Strike Jet", "kind": "plane", "hp": 220.0, "spd": 430.0, "turn": 2.2, "vis": 1100.0, "leash": 3000.0, "cd": 7.0, "cam": 0.68, "size": 1.5, "col": Color(0.42, 0.46, 0.50), "w": [["a_ms", 2], ["a_mg", 2]], "desc": "Fast carrier jet with a pair of anti-ship missiles and cannon."},
+	"jet_bomber": {"n": "Carrier Jet Bomber", "kind": "plane", "hp": 260.0, "spd": 410.0, "turn": 1.9, "vis": 1200.0, "leash": 3000.0, "cd": 8.0, "cam": 0.68, "size": 1.7, "col": Color(0.30, 0.33, 0.38), "w": [["bomb_l", 3]], "desc": "A rack of heavy bombs delivered at jet speed."},
+	"jet_heavy": {"n": "Heavy Strike Jet", "kind": "plane", "hp": 290.0, "spd": 450.0, "turn": 1.9, "vis": 1150.0, "leash": 3200.0, "cd": 8.0, "cam": 0.66, "size": 1.85, "col": Color(0.26, 0.29, 0.33), "w": [["a_ms_h", 1], ["a_rocket", 1], ["a_mg", 2]], "desc": "Big twin-engine strike jet: one supersonic missile, rockets and cannon."},
 }
 
 const ABILITIES := {
@@ -141,7 +205,7 @@ const ABILITIES := {
 	"barrage": {"n": "Barrage", "dur": 6.0, "cd": 38.0, "desc": "Weapons reload twice as fast"},
 	"chaff": {"n": "Countermeasures", "dur": 0.5, "cd": 24.0, "desc": "Nearby missiles and torpedoes lose lock"},
 	"mine_l": {"n": "Rapid Laying", "dur": 5.0, "cd": 30.0, "desc": "Mine reloads four times faster"},
-	"dive": {"n": "Emergency Dive", "dur": 12.0, "cd": 60.0, "desc": "Submerge for 12s: guns cannot touch you, only torpedoes. Long recharge while surfaced."},
+	"dive": {"n": "Emergency Dive", "dur": 16.0, "cd": 1.5, "desc": "Submerge for 16s: guns cannot touch you, only torpedoes. Dive again whenever you need it."},
 }
 
 const PAL := {
@@ -226,6 +290,9 @@ static func g(w: String, pts: Array, b: int = 1, dir: float = 0.0, arc: float = 
 static func _s(id: String, nm: String, tier: int, cls: String, style: String, L: float, W: float, hp: float, spd: float, turn: float, det: float, rlm: float, abil: Array, air: String, weapons: Array, ex: Dictionary = {}) -> Dictionary:
 	spd *= 0.80
 	turn *= 0.92
+	if cls == "Submarine":
+		hp *= 1.30
+		spd *= 1.08
 	var d := {"id": id, "name": nm, "tier": tier, "cls": cls, "style": style, "len": L, "wid": W, "hp": hp, "spd": spd, "turn": turn, "det": det, "rlm": rlm, "abil": abil, "air": air, "weapons": weapons, "cam": float(TIER_ZOOM[tier - 1]), "pal": "", "desc": "", "stealth": clampf(0.5 + L / 500.0, 0.6, 1.0)}
 	for k in ex.keys():
 		d[k] = ex[k]
@@ -469,3 +536,31 @@ static func half_width(x: float, L: float, W: float, bow: float, bp: float, st: 
 		var t := (u - bow) / (1.0 - bow)
 		f = pow(maxf(1.0 - pow(t, bp), 0.0), 0.55)
 	return W * 0.5 * f
+
+# ---- nickname filter: block 18+ and rude nicknames (with l33t-speak folding) ----
+const _BAD_NICKS := [
+	"fuck", "shit", "bitch", "asshole", "cunt", "dick", "cock", "penis", "vagina", "boob",
+	"titties", "tits", "anal", "cum", "jizz", "porn", "xxx", "nigger", "nigga", "faggot",
+	"fag", "rape", "rapist", "whore", "slut", "nazi", "hitler", "pedophile", "pornhub",
+]
+
+static func nick_ok(n: String) -> bool:
+	var s := n.to_lower()
+	var t := ""
+	for ch in s:
+		var cc := ch
+		match ch:
+			"0": cc = "o"
+			"1", "!", "|": cc = "i"
+			"3": cc = "e"
+			"4", "@": cc = "a"
+			"5", "$": cc = "s"
+			"7": cc = "t"
+			"8": cc = "b"
+			"9": cc = "g"
+		if cc >= "a" and cc <= "z":
+			t += cc
+	for w in _BAD_NICKS:
+		if t.contains(w):
+			return false
+	return true
